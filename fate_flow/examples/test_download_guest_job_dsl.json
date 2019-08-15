@@ -1,0 +1,7 @@
+{
+    "components" : {
+        "download_0": {
+            "module": "DownLoad"
+         }
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "initiator": {
+        "role": "guest",
+        "party_id": 10000
+    },
+    "job_parameters": {
+        "work_mode": 0
+    },
+    "role": {
+        "guest": [10000],
+        "host": [10000],
+        "arbiter": [10000]
+    },
+    "role_parameters": {
+        "guest": {
+            "download_0":{
+                "output_path": ["examples/download_data_test.txt"],
+                "namespace": ["fate_flow_test_breast"],
+                "table_name": ["breast_b"]
+            }
+        }
+
+        }
+
+}
