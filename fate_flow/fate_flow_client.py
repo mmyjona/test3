@@ -162,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--status', required=False, type=str, help="status")
     parser.add_argument('-n', '--namespace', required=False, type=str, help="namespace")
     parser.add_argument('-t', '--table_name', required=False, type=str, help="table name")
+    parser.add_argument('-w', '--work_mode', required=False, type=int, help="work mode")
     parser.add_argument('-i', '--file', required=False, type=str, help="file")
     parser.add_argument('-o', '--output_path', required=False, type=str, help="output_path")
     try:

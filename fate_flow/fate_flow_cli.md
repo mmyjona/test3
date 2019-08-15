@@ -3,16 +3,16 @@
 #### Job
 
 - command: fate_flow_client.py -f submit_job
+- description: submit a pipeline job
 - parameter:
     * -c  --config: runtime conf path, Required
     * -d  --dsl: dsl path, Required
-- description: submit job
 
 
 - command: fate_flow_client.py -f stop_job
+- description: stop job 
 - parameter:
     * -j  --job_id: job id, Required
-- description: stop job 
 
 
 - command: fate_flow_client.py -f query_job
