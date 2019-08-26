@@ -77,11 +77,16 @@ def get_rsa_of_current_version(local_party_id, id_type, encrypt_type, tag, timeo
             return None
 
 
-def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za'):
+def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za', local_role='host'):
     namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
+    if local_role.lower() == 'host':
+        return {'table_name': version, 'namespace': namespace}
+
     return save_data(dtable, namespace, version)
     
 
+def store_rsa(local_party_id, id_type, encrypt_type, tag, namespace, version, rsa_keys):
+    pass
 
 
 '''
