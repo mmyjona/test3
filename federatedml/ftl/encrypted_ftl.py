@@ -76,6 +76,10 @@ class EncryptedFTLGuestModel(PlainFTLGuestModel):
         self.enc_uB_overlap = components[0]
         self.enc_uB_overlap_2 = components[1]
         self.enc_mapping_comp_B = components[2]
+        # self._update_gradients()
+        # self._update_loss()
+
+    def compute_gradients(self):
         self._update_gradients()
         self._update_loss()
 
@@ -215,6 +219,9 @@ class EncryptedFTLHostModel(PlainFTLHostModel):
         self.enc_y_overlap_2_phi_2 = components[0]
         self.enc_y_overlap_phi = components[1]
         self.enc_mapping_comp_A = components[2]
+        # self._update_gradients()
+
+    def compute_gradients(self):
         self._update_gradients()
 
     def _update_gradients(self):

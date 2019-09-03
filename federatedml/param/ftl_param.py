@@ -42,9 +42,10 @@ class FTLModelParam(BaseParam):
 
     """
 
-    def __init__(self, max_iteration=10, batch_size=64, eps=1e-5,
+    def __init__(self, max_iteration=10, local_iterations=1, batch_size=64, eps=1e-5,
                  alpha=100, lr_decay=0.001, l2_para=1, is_encrypt=True, enc_ftl="dct_enc_ftl"):
         self.max_iter = max_iteration
+        self.local_iterations = local_iterations
         self.batch_size = batch_size
         self.eps = eps
         self.alpha = alpha

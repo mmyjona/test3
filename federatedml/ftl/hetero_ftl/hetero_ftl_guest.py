@@ -46,6 +46,7 @@ class HeteroFTLGuest(HeteroFTLParty):
         self.model_param = model_param
         self.transfer_variable = transfer_variable
         self.max_iter = model_param.max_iter
+        self.local_iterations = model_param.local_iterations
         self.n_iter_ = 0
         self.converge_func = DiffConverge(eps=model_param.eps)
 
@@ -323,11 +324,18 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
         start_time = time.time()
         is_stop = False
         while self.n_iter_ < self.max_iter:
+            global_iteration_start = time.time()
 
             # Stage 1: compute and encrypt components (using guest public key) required by host to
             #          calculate gradients.
             LOGGER.debug("@ Stage 1: ")
+            exchange_full_time_start = time.time()
+
+            precompute_start_time = time.time()
             guest_comp = self.guest_model.send_components()
+            precompute_end_time = time.time()
+
+            exchange_communication_time_start = time.time()
             LOGGER.debug("send enc guest_comp: " + create_shape_msg(guest_comp))
             self._do_remote(guest_comp, name=self.transfer_variable.guest_component_list.name,
                             tag=self.transfer_variable.generate_transferid(self.transfer_variable.guest_component_list,
@@ -345,71 +353,103 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
                                      idx=-1)[0]
             LOGGER.debug("receive enc host_comp: " + create_shape_msg(host_comp))
             self.guest_model.receive_components(host_comp)
+            exchange_communication_time_end = time.time()
 
-            self._precompute()
+            exchange_full_time_end = time.time()
 
-            # calculate guest gradients in encrypted form (encrypted by host public key)
-            encrypt_guest_gradients = self.guest_model.send_gradients()
-            LOGGER.debug("compute encrypt_guest_gradients: " + create_shape_msg(encrypt_guest_gradients))
-            encrypt_loss = self.guest_model.send_loss()
+            precompute_time = precompute_end_time - precompute_start_time
+            exchange_communication_time = exchange_communication_time_end - exchange_communication_time_start
+            exchange_spending_time = exchange_full_time_end - exchange_full_time_start
+            LOGGER.debug("guest precompute time {0}".format(precompute_time))
+            LOGGER.debug("guest exchange communication time {0}".format(exchange_communication_time))
+            LOGGER.debug("guest exchange spending time {0}".format(exchange_spending_time))
 
-            # add random mask to encrypt_guest_gradients and encrypt_loss, and send them to host for decryption
-            masked_enc_guest_gradients, gradients_masks = add_random_mask_for_list_of_values(encrypt_guest_gradients)
-            masked_enc_loss, loss_mask = add_random_mask(encrypt_loss)
+            loss = None
+            for local_iter in range(self.local_iterations):
+                local_iter_start_time = time.time()
+                LOGGER.debug("--> guest local computation: {0}".format(local_iter))
 
-            LOGGER.debug("send masked_enc_guest_gradients: " + create_shape_msg(masked_enc_guest_gradients))
-            self._do_remote(masked_enc_guest_gradients, name=self.transfer_variable.masked_enc_guest_gradients.name,
-                            tag=self.transfer_variable.generate_transferid(
-                                self.transfer_variable.masked_enc_guest_gradients, self.n_iter_),
-                            role=consts.HOST,
-                            idx=-1)
+                self.guest_model.compute_gradients()
 
-            self._do_remote(masked_enc_loss, name=self.transfer_variable.masked_enc_loss.name,
-                            tag=self.transfer_variable.generate_transferid(self.transfer_variable.masked_enc_loss,
-                                                                           self.n_iter_),
-                            role=consts.HOST,
-                            idx=-1)
+                self._precompute()
 
-            # Stage 3: receive and then decrypt masked encrypted host gradients and send them to guest
-            LOGGER.debug("@ Stage 3: ")
-            masked_enc_host_gradients = self._do_get(name=self.transfer_variable.masked_enc_host_gradients.name,
-                                                     tag=self.transfer_variable.generate_transferid(
-                                                         self.transfer_variable.masked_enc_host_gradients,
-                                                         self.n_iter_),
-                                                     idx=-1)[0]
+                # calculate guest gradients in encrypted form (encrypted by host public key)
+                encrypt_guest_gradients = self.guest_model.send_gradients()
+                LOGGER.debug("compute encrypt_guest_gradients: " + create_shape_msg(encrypt_guest_gradients))
+                encrypt_loss = self.guest_model.send_loss()
 
-            masked_dec_host_gradients = self.__decrypt_gradients(masked_enc_host_gradients)
+                gradient_decryption_start_time = time.time()
+                # add random mask to encrypt_guest_gradients and encrypt_loss, and send them to host for decryption
+                masked_enc_guest_gradients, gradients_masks = add_random_mask_for_list_of_values(encrypt_guest_gradients)
+                masked_enc_loss, loss_mask = add_random_mask(encrypt_loss)
 
-            LOGGER.debug("send masked_dec_host_gradients: " + create_shape_msg(masked_dec_host_gradients))
-            self._do_remote(masked_dec_host_gradients, name=self.transfer_variable.masked_dec_host_gradients.name,
-                            tag=self.transfer_variable.generate_transferid(
-                                self.transfer_variable.masked_dec_host_gradients, self.n_iter_),
-                            role=consts.HOST,
-                            idx=-1)
+                LOGGER.debug("send masked_enc_guest_gradients: " + create_shape_msg(masked_enc_guest_gradients))
+                self._do_remote(masked_enc_guest_gradients, name=self.transfer_variable.masked_enc_guest_gradients.name,
+                                tag=self.transfer_variable.generate_transferid(
+                                    self.transfer_variable.masked_enc_guest_gradients, self.n_iter_),
+                                role=consts.HOST,
+                                idx=-1)
 
-            # Stage 4: receive masked but decrypted guest gradients and loss from host, remove mask,
-            #          and update guest model parameters using these gradients.
-            LOGGER.debug("@ Stage 4: ")
-            masked_dec_guest_gradients = self._do_get(name=self.transfer_variable.masked_dec_guest_gradients.name,
-                                                      tag=self.transfer_variable.generate_transferid(
-                                                          self.transfer_variable.masked_dec_guest_gradients,
-                                                          self.n_iter_),
-                                                      idx=-1)[0]
-            LOGGER.debug("receive masked_dec_guest_gradients: " + create_shape_msg(masked_dec_guest_gradients))
+                if local_iter == 0:
+                    self._do_remote(masked_enc_loss, name=self.transfer_variable.masked_enc_loss.name,
+                                    tag=self.transfer_variable.generate_transferid(self.transfer_variable.masked_enc_loss,
+                                                                                   self.n_iter_),
+                                    role=consts.HOST,
+                                    idx=-1)
 
-            cleared_dec_guest_gradients = remove_random_mask_from_list_of_values(masked_dec_guest_gradients,
-                                                                                 gradients_masks)
+                # Stage 3: receive and then decrypt masked encrypted host gradients and send them to guest
+                LOGGER.debug("@ Stage 3: ")
+                masked_enc_host_gradients = self._do_get(name=self.transfer_variable.masked_enc_host_gradients.name,
+                                                         tag=self.transfer_variable.generate_transferid(
+                                                             self.transfer_variable.masked_enc_host_gradients,
+                                                             self.n_iter_),
+                                                         idx=-1)[0]
 
-            # update guest model parameters using these gradients.
-            self.guest_model.receive_gradients(cleared_dec_guest_gradients)
+                masked_dec_host_gradients = self.__decrypt_gradients(masked_enc_host_gradients)
 
-            masked_dec_loss = self._do_get(name=self.transfer_variable.masked_dec_loss.name,
-                                           tag=self.transfer_variable.generate_transferid(
-                                               self.transfer_variable.masked_dec_loss, self.n_iter_),
-                                           idx=-1)[0]
-            LOGGER.debug("receive masked_dec_loss: " + str(masked_dec_loss))
+                LOGGER.debug("send masked_dec_host_gradients: " + create_shape_msg(masked_dec_host_gradients))
+                self._do_remote(masked_dec_host_gradients, name=self.transfer_variable.masked_dec_host_gradients.name,
+                                tag=self.transfer_variable.generate_transferid(
+                                    self.transfer_variable.masked_dec_host_gradients, self.n_iter_),
+                                role=consts.HOST,
+                                idx=-1)
 
-            loss = remove_random_mask(masked_dec_loss, loss_mask)
+                # Stage 4: receive masked but decrypted guest gradients and loss from host, remove mask,
+                #          and update guest model parameters using these gradients.
+                LOGGER.debug("@ Stage 4: ")
+                masked_dec_guest_gradients = self._do_get(name=self.transfer_variable.masked_dec_guest_gradients.name,
+                                                          tag=self.transfer_variable.generate_transferid(
+                                                              self.transfer_variable.masked_dec_guest_gradients,
+                                                              self.n_iter_),
+                                                          idx=-1)[0]
+                LOGGER.debug("receive masked_dec_guest_gradients: " + create_shape_msg(masked_dec_guest_gradients))
+
+                cleared_dec_guest_gradients = remove_random_mask_from_list_of_values(masked_dec_guest_gradients,
+                                                                                     gradients_masks)
+
+                gradient_decryption_end_time = time.time()
+                gradient_decryption_time = gradient_decryption_end_time - gradient_decryption_start_time
+                LOGGER.debug("guest local iteration {0} with gradient decryption time {1}".
+                             format(local_iter, gradient_decryption_time))
+
+                # update guest model parameters using these gradients.
+                self.guest_model.receive_gradients(cleared_dec_guest_gradients)
+
+                if local_iter == 0:
+                    masked_dec_loss = self._do_get(name=self.transfer_variable.masked_dec_loss.name,
+                                                   tag=self.transfer_variable.generate_transferid(
+                                                       self.transfer_variable.masked_dec_loss, self.n_iter_),
+                                                   idx=-1)[0]
+                    LOGGER.debug("receive masked_dec_loss: " + str(masked_dec_loss))
+
+                    loss = remove_random_mask(masked_dec_loss, loss_mask)
+
+                if local_iter != self.local_iterations - 1:
+                    self.guest_model._compute_components()
+
+                local_iter_end_time = time.time()
+                local_iter_spending_time = local_iter_end_time - local_iter_start_time
+                LOGGER.debug("guest local iteration spending time {0}".format(local_iter_spending_time))
 
             # Stage 5: determine whether training is terminated based on loss and send stop signal to host.
             LOGGER.debug("@ Stage 5: ")
@@ -424,7 +464,10 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
                             role=consts.HOST,
                             idx=-1)
 
-            LOGGER.info("@ time: " + str(time.time()) + ", ep:" + str(self.n_iter_) + ", loss:" + str(loss))
+            global_iteration_end = time.time()
+            global_iteration_spending_time = global_iteration_end - global_iteration_start
+            LOGGER.info("@ time: " + str(time.time()) + ", ep:" + str(self.n_iter_) +
+                        ", spending time:" + str(global_iteration_spending_time) + ", loss:" + str(loss))
             LOGGER.info("@ converged: " + str(is_stop))
             self.n_iter_ += 1
             if is_stop:
