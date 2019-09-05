@@ -14,8 +14,10 @@
 #  limitations under the License.
 #
 import datetime
+import threading
 import time
 
+from arch.api import storage
 from arch.api.utils import log_utils, version_control
 from arch.api.utils.dtable_utils import get_table_info
 from federatedml.util.db_models import DB, IdLibraryCacheInfo
@@ -34,8 +36,6 @@ LOGGER = log_utils.getLogger()
 return: a dictionary contains table_name and namespace, 
 e.g.： {'table_name': '5c33fe50bd7d11e988b352540012fde6', 'namespace': 'id_library_cache#10001#all#imei#md5#Za'}
 '''
-
-
 def host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=600):
     return get_current_version(id_type, encrypt_type, tag, host_party_id, timeout=timeout)
 
@@ -44,54 +44,77 @@ def host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=
 return: a dictionary contains table_name and namespace, 
 e.g.： {'table_name': '5c33fe50bd7d11e988b352540012fde6', 'namespace': 'id_library_cache#10001#10000#imei#md5#Za'}
 '''
-
-
 def guest_get_current_version(host_party_id, guest_party_id, id_type, encrypt_type, tag, timeout=600):
-    return get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id,
-                               timeout=timeout)
+    return get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id, timeout=timeout)
 
 
 '''
 return: a dictionary contains rsa_n, rsa_e, and rsa_d
 '''
-
-
-def get_rsa_of_current_version(local_party_id, id_type, encrypt_type, tag, timeout=60):
-    table_info = host_get_current_verison(local_party_id, id_type, encrypt_type, tag, timeout=timeout)
+def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeout=60):
+    table_info = host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=timeout)
     namespace = table_info.get('namespace')
     version = table_info.get('table_name')
     if namespace is None or version is None:
-        LOGGER.error('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(
-            local_party_id,
+        LOGGER.error('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
             id_type, encrypt_type, tag))
         return None
 
     with DB.connection_context():
-        LOGGER.info(
-            'query cache info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format(
-                local_party_id,
-                id_type, encrypt_type, namespace, version, tag))
-        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == local_party_id,
-                                                  IdLibraryCacheInfo.f_id_type == id_type,
-                                                  IdLibraryCacheInfo.f_encrypt_type == encrypt_type,
-                                                  IdLibraryCacheInfo.f_tag == tag,
-                                                  IdLibraryCacheInfo.f_namespcae == namespace,
-                                                  IdLibraryCacheInfo.f_version == version)
+        LOGGER.info('query cache info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format(host_party_id, \
+            id_type, encrypt_type, namespace, version, tag))
+        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == host_party_id, \
+            IdLibraryCacheInfo.f_id_type == id_type, IdLibraryCacheInfo.f_encrypt_type == encrypt_type, \
+            IdLibraryCacheInfo.f_tag == tag, IdLibraryCacheInfo.f_namespcae == namespace, IdLibraryCacheInfo.f_version == version)
         if infos:
             info = infos[0]
             rsa_key = {'rsa_n': info.f_rsa_key_n, 'rsa_e': info.f_rsa_key_e, 'rsa_d': info.f_rsa_key_d}
             LOGGER.debug(rsa_key)
             return rsa_key
         else:
-            LOGGER.error(
-                'query cache info return nil, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format( \
-                    local_party_id, id_type, encrypt_type, namespace, version, tag))
+            LOGGER.error('query cache info return nil, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format( \
+                host_party_id, id_type, encrypt_type, namespace, version, tag))
             return None
 
 
 def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za'):
     namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
+    table_config = {}
+    table_config['gen_table_info'] = True
+    table_config['namespace'] = namespace
+    table_config['table_name'] = version
+    LOGGER.info(table_config)
+    version, namespace = get_table_info(config=table_config, create=True)
     return save_data(dtable, namespace, version)
+    
+
+def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa):
+    with DB.connection_context():
+        LOGGER.info('store rsa and out table info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}.'.format(host_party_id, \
+            id_type, encrypt_type, namespace, version))
+        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == host_party_id, \
+            IdLibraryCacheInfo.f_id_type == id_type, IdLibraryCacheInfo.f_encrypt_type == encrypt_type, \
+            IdLibraryCacheInfo.f_tag == tag, IdLibraryCacheInfo.f_namespcae == namespace, IdLibraryCacheInfo.f_version == version)
+        is_insert = True
+        if infos:
+            info = infos[0]
+            is_insert = False
+        else:
+            info = IdLibraryCacheInfo()
+
+        info.f_party_id = host_party_id
+        info.f_id_type = id_type
+        info.f_encrypt_type = encrypt_type
+        info.f_namespcae = namespace
+        info.f_version = version
+        info.f_tag = tag
+        info.f_rsa_key_n = str(rsa.n)
+        info.f_rsa_key_d = str(rsa.d)
+        info.f_rsa_key_e = str(rsa.e)
+        if is_insert:
+            info.save(force_insert=True)
+        else:
+            info.save()
 
 
 '''
@@ -99,8 +122,6 @@ def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt
 ########## intra-face ###########################################################
 ################################################################################
 '''
-
-
 def gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=None, data_type='id_library_cache'):
     if guest_party_id is None:
         guest_party_id = 'all'
@@ -110,18 +131,16 @@ def gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_i
 def get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_id=None, timeout=600):
     config = {}
     config['gen_table_info'] = True
-    config['create'] = False
     config['namespace'] = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
 
     LOGGER.info(config)
     table_info = get_table_info_without_create(table_config=config)
     LOGGER.info(table_info)
-
+    
     if table_info.get('table_name'):
-        LOGGER.info(
-            'table exists, namepsace={}, version={}.'.format(table_info.get('namespace'), table_info.get('table_name')))
+        LOGGER.info('table exists, namepsace={}, version={}.'.format(table_info.get('namespace'), table_info.get('table_name')))
         return table_info
-
+    
     redis_adapter = RedisAdaptor()
     cache_job = redis_adapter.get(config['namespace'])
     if cache_job is None:
@@ -129,14 +148,13 @@ def get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_i
         if guest_party_id:
             redis_adapter.setex(config['namespace'], 'guest_get_current_version')
         return None
-
+    
     for i in range(timeout):
         cache_job = redis_adapter.get(config['namespace'])
         if cache_job is None:
             table_info = get_table_info_without_create(table_config=config)
             if table_info.get('table_name'):
-                LOGGER.info('after cache job finish, get table info, namepsace={}, version={}.'.format(
-                    table_info.get('namespace'), table_info.get('table_name')))
+                LOGGER.info('after cache job finish, get table info, namepsace={}, version={}.'.format(table_info.get('namespace'), table_info.get('table_name')))
                 return table_info
             else:
                 LOGGER.error('after cache job finish, table not exist, namepsace={}.'.format(config['namespace']))
@@ -158,16 +176,16 @@ def save_data(data_inst, namespace, version):
         data_table_namespace=persistent_table._namespace, data_table_name=persistent_table._name)
 
     version_log = "[AUTO] save data at %s." % datetime.datetime.now()
-    version_control.save_version(name=persistent_table._name, namespace=persistent_table._namespace,
-                                 version_log=version_log)
+    version_control.save_version(name=persistent_table._name, namespace=persistent_table._namespace, version_log=version_log)
 
     redis_adapter.delete(namespace)
 
-    LOGGER.info(
-        'save table done, namepsace={}, version={}.'.format(persistent_table._namespace, persistent_table._name))
+    LOGGER.info('save table done, namepsace={}, version={}.'.format(persistent_table._namespace, persistent_table._name))
     return {'table_name': persistent_table._name, 'namespace': persistent_table._namespace}
 
 
 def get_table_info_without_create(table_config):
-    table_name, namespace = get_table_info(config=table_config, create=table_config.get('create', False))
+    table_name, namespace = get_table_info(config=table_config, create=False)
     return {'table_name': table_name, 'namespace': namespace}
+
+
