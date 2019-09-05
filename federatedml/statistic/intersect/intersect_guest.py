@@ -18,11 +18,13 @@ import gmpy2
 import hashlib
 import random
 
+from arch.api import eggroll
 from arch.api.federation import remote, get
 from arch.api.utils import log_utils
 from federatedml.secureprotol import gmpy_math
 from federatedml.statistic.intersect import RawIntersect
 from federatedml.statistic.intersect import RsaIntersect
+from federatedml.util import cache_utils
 from federatedml.util import consts
 from federatedml.util.transfer_variable.rsa_intersect_transfer_variable import RsaIntersectTransferVariable
 
@@ -33,12 +35,16 @@ class RsaIntersectionGuest(RsaIntersect):
     def __init__(self, intersect_params):
         super().__init__(intersect_params)
 
-        self.send_intersect_id_flag = intersect_params.is_send_intersect_ids
+        self.synchronize_intersect_ids = intersect_params.synchronize_intersect_ids
         self.random_bit = intersect_params.random_bit
 
         self.e = None
         self.n = None
         self.transfer_variable = RsaIntersectTransferVariable()
+
+        # parameter for intersection cache
+        self.intersect_cache_param = intersect_params.intersect_cache_param
+        self.current_version = None
 
     @staticmethod
     def hash(value):
@@ -56,7 +62,7 @@ class RsaIntersectionGuest(RsaIntersect):
 
         # generate random value and sent intersect guest ids to guest
         # table(sid, r)
-        table_random_value = data_instances.mapValues(
+        random_value = data_instances.mapValues(
             lambda v: random.SystemRandom().getrandbits(self.random_bit))
 
         # table(sid, hash(sid))
@@ -64,11 +70,11 @@ class RsaIntersectionGuest(RsaIntersect):
                                             (k, int(RsaIntersectionGuest.hash(k),
                                                     16)))
         # table(sid. r^e % n *hash(sid))
-        table_guest_id = table_random_value.join(table_hash_sid, lambda r, h: h * gmpy_math.powmod(r, self.e,
+        table_guest_id = random_value.join(table_hash_sid, lambda r, h: h * gmpy_math.powmod(r, self.e,
                                                                                                    self.n))
         # table(r^e % n *hash(sid), 1)
-        table_send_guest_id = table_guest_id.map(lambda k, v: (v, 1))
-        remote(table_send_guest_id,
+        send_guest_id = table_guest_id.map(lambda k, v: (v, 1))
+        remote(send_guest_id,
                name=self.transfer_variable.intersect_guest_ids.name,
                tag=self.transfer_variable.generate_transferid(self.transfer_variable.intersect_guest_ids),
                role=consts.HOST,
@@ -76,53 +82,87 @@ class RsaIntersectionGuest(RsaIntersect):
         LOGGER.info("Remote guest_id to Host")
 
         # table(r^e % n *hash(sid), sid)
-        table_exchange_guest_id = table_guest_id.map(lambda k, v: (v, k))
+        exchange_guest_id = table_guest_id.map(lambda k, v: (v, k))
 
-        # Recv host_ids_process
-        # table(host_id_process, 1)
-        table_host_ids_process = get(name=self.transfer_variable.intersect_host_ids_process.name,
+        if self.use_cache:
+            current_version = cache_utils.guest_get_current_version(host_party_id=self.host_party_id,
+                                                                    guest_party_id=self.guest_party_id,
+                                                                    id_type=self.intersect_cache_param.id_type,
+                                                                    encrypt_type=self.intersect_cache_param.encrypt_type,
+                                                                    tag='Za'
+                                                                    )
+
+            LOGGER.info("Get current cache version info, table_name:{}, namespace:{}".format(current_version.get('table_name'),
+                                                                                             current_version.get('namespace')))
+
+            remote(current_version,
+                   name=self.transfer_variable.cache_version_info,
+                   tag=self.transfer_variable.generate_transferid(self.transfer_variable.cache_version_info),
+                   role=consts.HOST,
+                   idx=0)
+            LOGGER.info("Remote current version to host")
+
+            cache_version_match_info = get(name=self.transfer_variable.cache_version_match_info.name,
+                                           tag=self.transfer_variable.generate_transferid(self.transfer_variable.cache_version_match_info),
+                                           idx=0)
+            LOGGER.info("Get version match info from host")
+
+            if cache_version_match_info:
+                host_ids_process = eggroll.table(name=current_version.get('table_name'),
+                                                      namespace=current_version.get('namespace'),
+                                                      create_if_missing=True,
+                                                      error_if_exist=False)
+            else:
+                # Recv host_ids_process
+                # table(host_id_process, 1)
+                host_ids_process = get(name=self.transfer_variable.intersect_host_ids_process.name,
                                      tag=self.transfer_variable.generate_transferid(
                                          self.transfer_variable.intersect_host_ids_process),
                                      idx=0)
+        else:
+            # table(host_id_process, 1)
+            host_ids_process = get(name=self.transfer_variable.intersect_host_ids_process.name,
+                                   tag=self.transfer_variable.generate_transferid(
+                                       self.transfer_variable.intersect_host_ids_process),
+                                   idx=0)
         LOGGER.info("Get host_ids_process from Host")
 
         # Recv process guest ids
         # table(r^e % n *hash(sid), guest_id_process)
-        table_recv_guest_ids_process = get(name=self.transfer_variable.intersect_guest_ids_process.name,
+        recv_guest_ids_process = get(name=self.transfer_variable.intersect_guest_ids_process.name,
                                            tag=self.transfer_variable.generate_transferid(
                                                self.transfer_variable.intersect_guest_ids_process),
-                                           # role=consts.HOST,
                                            idx=0)
         LOGGER.info("Get guest_ids_process from Host")
 
         # table(r^e % n *hash(sid), sid, guest_ids_process)
-        table_join_guest_ids_process = table_exchange_guest_id.join(table_recv_guest_ids_process,
+        join_guest_ids_process = exchange_guest_id.join(recv_guest_ids_process,
                                                                     lambda sid, g: (sid,
                                                                                     g))
         # table(sid, guest_ids_process)
-        table_sid_guest_ids_process = table_join_guest_ids_process.map(
+        sid_guest_ids_process = join_guest_ids_process.map(
             lambda k, v: (v[0], v[1]))
 
         # table(sid, hash(guest_ids_process/r)))
-        table_sid_guest_ids_process_final = table_sid_guest_ids_process.join(table_random_value,
+        sid_guest_ids_process_final = sid_guest_ids_process.join(random_value,
                                                                              lambda g, r: RsaIntersectionGuest.hash(
                                                                                  gmpy2.divm(int(g), int(r), self.n)
                                                                              )
                                                                              )
 
         # table(hash(guest_ids_process/r), sid)
-        table_guest_ids_process_final_sid = table_sid_guest_ids_process_final.map(
+        guest_ids_process_final_sid = sid_guest_ids_process_final.map(
             lambda k, v: (v, k))
 
         # intersect table(hash(guest_ids_process/r), sid)
-        table_encrypt_intersect_ids = table_guest_ids_process_final_sid.join(table_host_ids_process, lambda sid, h: sid)
+        table_encrypt_intersect_ids = guest_ids_process_final_sid.join(host_ids_process, lambda sid, h: sid)
 
         # intersect table(hash(guest_ids_process/r), 1)
         table_send_intersect_ids = table_encrypt_intersect_ids.mapValues(lambda v: 1)
         LOGGER.info("Finish intersect_ids computing")
 
         # send intersect id
-        if self.send_intersect_id_flag:
+        if self.synchronize_intersect_ids:
             remote(table_send_intersect_ids,
                    name=self.transfer_variable.intersect_ids.name,
                    tag=self.transfer_variable.generate_transferid(self.transfer_variable.intersect_ids),

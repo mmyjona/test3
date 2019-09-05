@@ -15,13 +15,17 @@
 #
 
 import hashlib
+
+from arch.api import eggroll
 from arch.api.federation import remote, get
 from arch.api.utils import log_utils
 from federatedml.secureprotol import gmpy_math
 from federatedml.secureprotol.encrypt import RsaEncrypt
 from federatedml.statistic.intersect import RawIntersect
 from federatedml.statistic.intersect import RsaIntersect
+from federatedml.util import cache_utils
 from federatedml.util import consts
+from federatedml.util.check import check_eq
 from federatedml.util.transfer_variable.rsa_intersect_transfer_variable import RsaIntersectTransferVariable
 
 LOGGER = log_utils.getLogger()
@@ -31,24 +35,46 @@ class RsaIntersectionHost(RsaIntersect):
     def __init__(self, intersect_params):
         super().__init__(intersect_params)
 
-        self.get_intersect_ids_flag = intersect_params.is_get_intersect_ids
+        self.synchronize_intersect_ids = intersect_params.synchronize_intersect_ids
         self.transfer_variable = RsaIntersectTransferVariable()
 
         self.e = None
         self.d = None
         self.n = None
 
+        # parameter for intersection cache
+        self.intersect_cache_param = intersect_params.intersect_cache_param
+        self.current_version = None
+        self.is_version_match = False
+
     @staticmethod
     def hash(value):
         return hashlib.sha256(bytes(str(value), encoding='utf-8')).hexdigest()
 
+    def cal_host_ids_process_pair(self, data_instances:eggroll.table) -> eggroll.table:
+        return data_instances.map(
+                lambda k, v: (
+                    RsaIntersectionHost.hash(gmpy_math.powmod(int(RsaIntersectionHost.hash(k), 16), self.d, self.n)), k)
+            )
+
     def run(self, data_instances):
         LOGGER.info("Start rsa intersection")
 
-        encrypt_operator = RsaEncrypt()
-        encrypt_operator.generate_key(rsa_bit=1024)
-        self.e, self.d, self.n = encrypt_operator.get_key_pair()
-        LOGGER.info("Generate rsa keys.")
+        if self.use_cache:
+            LOGGER.info("Using intersection cache scheme, start to getting rsa key from cache.")
+            rsa_key = cache_utils.get_rsa_of_current_version(local_party_id=self.host_party_id,
+                                                             id_type=self.intersect_cache_param.id_type,
+                                                             encrypt_type=self.intersect_cache_param.encrypt_type,
+                                                             tag='Za')
+            self.e = rsa_key.get('rsa_e')
+            self.d = rsa_key.get('rsa_d')
+            self.n = rsa_key.get('rsa_n')
+        else:
+            LOGGER.info("Generate rsa keys.")
+            encrypt_operator = RsaEncrypt()
+            encrypt_operator.generate_key(rsa_bit=1024)
+            self.e, self.d, self.n = encrypt_operator.get_key_pair()
+
         public_key = {"e": self.e, "n": self.n}
         remote(public_key,
                name=self.transfer_variable.rsa_pubkey.name,
@@ -58,18 +84,53 @@ class RsaIntersectionHost(RsaIntersect):
         LOGGER.info("Remote public key to Guest.")
 
         # (host_id_process, 1)
-        host_ids_process_pair = data_instances.map(
-            lambda k, v: (
-                RsaIntersectionHost.hash(gmpy_math.powmod(int(RsaIntersectionHost.hash(k), 16), self.d, self.n)), k)
-        )
+        if self.use_cache:
+            self.current_version = cache_utils.host_get_current_verison(host_party_id=self.host_party_id,
+                                                                        id_type=self.intersect_cache_param.id_type,
+                                                                        encrypt_type=self.intersect_cache_param.encrypt_type,
+                                                                        tag='Za')
 
-        host_ids_process = host_ids_process_pair.mapValues(lambda v: 1)
-        remote(host_ids_process,
-               name=self.transfer_variable.intersect_host_ids_process.name,
-               tag=self.transfer_variable.generate_transferid(self.transfer_variable.intersect_host_ids_process),
-               role=consts.GUEST,
-               idx=0)
-        LOGGER.info("Remote host_ids_process to Guest.")
+            guest_current_version = get(name=self.transfer_variable.cache_version_info.name,
+                                        tag=self.transfer_variable.generate_transferid(
+                                            self.transfer_variable.cache_version_info),
+                                        idx=0)
+
+            if check_eq(guest_current_version.get('table_name'), self.current_version.get('table_name')) and check_eq(
+                    guest_current_version.get('table_name'), self.current_version.get('table_name')) and self.current_version is not None:
+                self.is_version_match = True
+            else:
+                self.is_version_match = False
+
+            LOGGER.info("version_match:{}".format(self.is_version_match))
+
+            remote(self.is_version_match,
+                   name=self.transfer_variable.cache_version_match_info.name,
+                   tag=self.transfer_variable.generate_transferid(self.transfer_variable.cache_version_match_info),
+                   role=consts.GUEST,
+                   idx=0)
+            LOGGER.info("remote version match info to guest")
+
+            host_ids_process_pair = None
+            if not self.is_version_match or self.synchronize_intersect_ids:
+                LOGGER.info("read Za from cache")
+                host_ids_process_pair = eggroll.table(name=self.current_version.get('table_name'),
+                                                      namespace=self.current_version.get('namespace'),
+                                                      create_if_missing=True,
+                                                      error_if_exist=False)
+                if check_eq(host_ids_process_pair.count(), 0):
+                    host_ids_process_pair = self.cal_host_ids_process_pair(data_instances)
+        else:
+            LOGGER.info("calculate Za using raw id")
+            host_ids_process_pair = self.cal_host_ids_process_pair(data_instances)
+
+        if self.use_cache and not self.is_version_match:
+            host_ids_process = host_ids_process_pair.mapValues(lambda v: 1)
+            remote(host_ids_process,
+                   name=self.transfer_variable.intersect_host_ids_process.name,
+                   tag=self.transfer_variable.generate_transferid(self.transfer_variable.intersect_host_ids_process),
+                   role=consts.GUEST,
+                   idx=0)
+            LOGGER.info("Remote host_ids_process to Guest.")
 
         # Recv guest ids
         guest_ids = get(name=self.transfer_variable.intersect_guest_ids.name,
@@ -88,7 +149,7 @@ class RsaIntersectionHost(RsaIntersect):
 
         # recv intersect ids
         intersect_ids = None
-        if self.get_intersect_ids_flag:
+        if self.synchronize_intersect_ids:
             encrypt_intersect_ids = get(name=self.transfer_variable.intersect_ids.name,
                                         tag=self.transfer_variable.generate_transferid(
                                             self.transfer_variable.intersect_ids),
@@ -121,6 +182,3 @@ class RawIntersectionHost(RawIntersect):
             raise ValueError("Unknown intersect join role, please check the configure of host")
 
         return intersect_ids
-
-
-

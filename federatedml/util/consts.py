@@ -109,3 +109,9 @@ MINMAXSCALE = 'min_max_scale'
 STANDARDSCALE = 'standard_scale'
 ALL = 'all'
 COL = 'col'
+
+# intersection cache
+PHONE = 'phone'
+IMEI = 'imei'
+MD5 = 'md5'
+SHA256 = 'sha256'
