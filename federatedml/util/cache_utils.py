@@ -51,19 +51,19 @@ def guest_get_current_version(host_party_id, guest_party_id, id_type, encrypt_ty
 '''
 return: a dictionary contains rsa_n, rsa_e, and rsa_d
 '''
-def get_rsa_of_current_version(local_party_id, id_type, encrypt_type, tag, timeout=60):
-    table_info = host_get_current_verison(local_party_id, id_type, encrypt_type, tag, timeout=timeout)
+def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeout=60):
+    table_info = host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=timeout)
     namespace = table_info.get('namespace')
     version = table_info.get('table_name')
     if namespace is None or version is None:
-        LOGGER.error('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(local_party_id, \
+        LOGGER.error('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
             id_type, encrypt_type, tag))
         return None
 
     with DB.connection_context():
-        LOGGER.info('query cache info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format(local_party_id, \
+        LOGGER.info('query cache info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format(host_party_id, \
             id_type, encrypt_type, namespace, version, tag))
-        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == local_party_id, \
+        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == host_party_id, \
             IdLibraryCacheInfo.f_id_type == id_type, IdLibraryCacheInfo.f_encrypt_type == encrypt_type, \
             IdLibraryCacheInfo.f_tag == tag, IdLibraryCacheInfo.f_namespcae == namespace, IdLibraryCacheInfo.f_version == version)
         if infos:
@@ -73,20 +73,48 @@ def get_rsa_of_current_version(local_party_id, id_type, encrypt_type, tag, timeo
             return rsa_key
         else:
             LOGGER.error('query cache info return nil, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format( \
-                local_party_id, id_type, encrypt_type, namespace, version, tag))
+                host_party_id, id_type, encrypt_type, namespace, version, tag))
             return None
 
 
-def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za', local_role='host'):
+def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za'):
     namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
-    if local_role.lower() == 'host':
-        return {'table_name': version, 'namespace': namespace}
-
+    table_config = {}
+    table_config['gen_table_info'] = True
+    table_config['namespace'] = namespace
+    table_config['table_name'] = version
+    LOGGER.info(table_config)
+    version, namespace = get_table_info(config=table_config, create=True)
     return save_data(dtable, namespace, version)
     
 
-def store_rsa(local_party_id, id_type, encrypt_type, tag, namespace, version, rsa_keys):
-    pass
+def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa):
+    with DB.connection_context():
+        LOGGER.info('store rsa and out table info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}.'.format(host_party_id, \
+            id_type, encrypt_type, namespace, version))
+        infos = IdLibraryCacheInfo.select().where(IdLibraryCacheInfo.f_party_id == host_party_id, \
+            IdLibraryCacheInfo.f_id_type == id_type, IdLibraryCacheInfo.f_encrypt_type == encrypt_type, \
+            IdLibraryCacheInfo.f_tag == tag, IdLibraryCacheInfo.f_namespcae == namespace, IdLibraryCacheInfo.f_version == version)
+        is_insert = True
+        if infos:
+            info = infos[0]
+            is_insert = False
+        else:
+            info = IdLibraryCacheInfo()
+
+        info.f_party_id = host_party_id
+        info.f_id_type = id_type
+        info.f_encrypt_type = encrypt_type
+        info.f_namespcae = namespace
+        info.f_version = version
+        info.f_tag = tag
+        info.f_rsa_key_n = str(rsa.n)
+        info.f_rsa_key_d = str(rsa.d)
+        info.f_rsa_key_e = str(rsa.e)
+        if is_insert:
+            info.save(force_insert=True)
+        else:
+            info.save()
 
 
 '''
@@ -103,7 +131,6 @@ def gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_i
 def get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_id=None, timeout=600):
     config = {}
     config['gen_table_info'] = True
-    config['create'] = False
     config['namespace'] = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
 
     LOGGER.info(config)
@@ -158,7 +185,7 @@ def save_data(data_inst, namespace, version):
 
 
 def get_table_info_without_create(table_config):
-    table_name, namespace = get_table_info(config=table_config, create=table_config.get('create', False))
+    table_name, namespace = get_table_info(config=table_config, create=False)
     return {'table_name': table_name, 'namespace': namespace}
 
 
