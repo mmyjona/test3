@@ -18,12 +18,14 @@ import inspect
 import os
 import sys
 
+import __main__
 from peewee import Model, CharField, IntegerField, BigIntegerField, TextField, CompositeKey, BigAutoField, DateTimeField
 from playhouse.apsw_ext import APSWDatabase
 from playhouse.pool import PooledMySQLDatabase
 
 from arch.api.utils import log_utils
-from fate_flow.entity.service_support_config import WorkMode
+from arch.api.utils.core import current_timestamp
+from fate_flow.entity.constant_config import WorkMode
 from fate_flow.settings import DATABASE, WORK_MODE, stat_logger, USE_LOCAL_DATABASE
 
 LOGGER = log_utils.getLogger()
@@ -94,8 +96,8 @@ def init_database_tables():
         DB.create_tables(table_objs)
 
 
-DEFAULT_TAG = 'Za'
 
+DEFAULT_TAG = 'Za'
 
 class IdLibraryCacheInfo(DataBaseModel):
     f_party_id = CharField(max_length=32)
