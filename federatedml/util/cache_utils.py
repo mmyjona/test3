@@ -54,12 +54,12 @@ return: a dictionary contains rsa_n, rsa_e, and rsa_d
 def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeout=60):
     table_info = host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=timeout)
     if table_info is None:
-        LOGGER.error('no cache exists.')
+        LOGGER.info('no cache exists.')
         return None
     namespace = table_info.get('namespace')
     version = table_info.get('table_name')
     if namespace is None or version is None:
-        LOGGER.error('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
+        LOGGER.info('host_get_current_verison return None, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
             id_type, encrypt_type, tag))
         return None
 
@@ -75,7 +75,7 @@ def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeou
             LOGGER.debug(rsa_key)
             return rsa_key
         else:
-            LOGGER.error('query cache info return nil, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format( \
+            LOGGER.info('query cache info return nil, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format( \
                 host_party_id, id_type, encrypt_type, namespace, version, tag))
             return None
 
@@ -147,7 +147,7 @@ def get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_i
     redis_adapter = RedisAdaptor()
     cache_job = redis_adapter.get(config['namespace'])
     if cache_job is None:
-        LOGGER.error('neighter table, nor cache job exists, namepsace={}.'.format(config['namespace']))
+        LOGGER.info('neighter table, nor cache job exists, namepsace={}.'.format(config['namespace']))
         if guest_party_id:
             redis_adapter.setex(config['namespace'], 'guest_get_current_version')
         return None
@@ -160,10 +160,10 @@ def get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_i
                 LOGGER.info('after cache job finish, get table info, namepsace={}, version={}.'.format(table_info.get('namespace'), table_info.get('table_name')))
                 return table_info
             else:
-                LOGGER.error('after cache job finish, table not exist, namepsace={}.'.format(config['namespace']))
+                LOGGER.info('after cache job finish, table not exist, namepsace={}.'.format(config['namespace']))
                 return None
         time.sleep(1)
-    LOGGER.error('wait cache job timeout, get version fail, namepsace={}.'.format(config['namespace']))
+    LOGGER.info('wait cache job timeout, get version fail, namepsace={}.'.format(config['namespace']))
     return None
 
 
