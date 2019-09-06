@@ -70,8 +70,8 @@ class IntersectModelBase(ModelBase):
         return self.intersect_ids
 
     def run(self, component_parameters=None, args=None):
-        self.guest_party_id = component_parameters["role"]["guest"]
-        self.host_party_id = component_parameters["role"]["host"]
+        self.guest_party_id = component_parameters["role"]["guest"][0]
+        self.host_party_id = component_parameters["role"]["host"][0]
 
         self._init_runtime_parameters(component_parameters)
 

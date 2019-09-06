@@ -20,7 +20,6 @@ from federatedml.secureprotol.encode import Encode
 from federatedml.util import consts
 from federatedml.util.transfer_variable.raw_intersect_transfer_variable import RawIntersectTransferVariable
 
-
 LOGGER = log_utils.getLogger()
 
 
@@ -63,7 +62,7 @@ class RsaIntersect(Intersect):
     @guest_party_id.setter
     def guest_party_id(self, guest_id):
         if not isinstance(guest_id, int):
-            raise ValueError("party id should be integer")
+            raise ValueError("party id should be integer, but get {}".format(guest_id))
         self._guest_id = guest_id
 
     @property
@@ -73,7 +72,7 @@ class RsaIntersect(Intersect):
     @host_party_id.setter
     def host_party_id(self, host_id):
         if not isinstance(host_id, int):
-            raise ValueError("party id should be integer")
+            raise ValueError("party id should be integer, but get {}".format(host_id))
         self._host_id = host_id
 
 
