@@ -51,6 +51,9 @@ return: a dictionary contains rsa_n, rsa_e, and rsa_d
 '''
 def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeout=60):
     table_info = host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=timeout)
+    if table_info is None:
+        LOGGER.error('no cache exists.')
+        return None
     namespace = table_info.get('namespace')
     version = table_info.get('table_name')
     if namespace is None or version is None:
