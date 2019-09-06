@@ -14,10 +14,8 @@
 #  limitations under the License.
 #
 import datetime
-import threading
 import time
 
-from arch.api import storage
 from arch.api.utils import log_utils, version_control
 from arch.api.utils.dtable_utils import get_table_info
 from federatedml.util.db_models import DB, IdLibraryCacheInfo

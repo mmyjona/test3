@@ -71,7 +71,7 @@ class RsaIntersectionGuest(RsaIntersect):
                                                     16)))
         # table(sid. r^e % n *hash(sid))
         table_guest_id = random_value.join(table_hash_sid, lambda r, h: h * gmpy_math.powmod(r, self.e,
-                                                                                                   self.n))
+                                                                                             self.n))
         # table(r^e % n *hash(sid), 1)
         send_guest_id = table_guest_id.map(lambda k, v: (v, 1))
         remote(send_guest_id,
@@ -92,8 +92,9 @@ class RsaIntersectionGuest(RsaIntersect):
                                                                     tag='Za'
                                                                     )
 
-            LOGGER.info("Get current cache version info, table_name:{}, namespace:{}".format(current_version.get('table_name'),
-                                                                                             current_version.get('namespace')))
+            LOGGER.info(
+                "Get current cache version info, table_name:{}, namespace:{}".format(current_version.get('table_name'),
+                                                                                     current_version.get('namespace')))
 
             remote(current_version,
                    name=self.transfer_variable.cache_version_info,
@@ -103,22 +104,34 @@ class RsaIntersectionGuest(RsaIntersect):
             LOGGER.info("Remote current version to host")
 
             cache_version_match_info = get(name=self.transfer_variable.cache_version_match_info.name,
-                                           tag=self.transfer_variable.generate_transferid(self.transfer_variable.cache_version_match_info),
+                                           tag=self.transfer_variable.generate_transferid(
+                                               self.transfer_variable.cache_version_match_info),
                                            idx=0)
             LOGGER.info("Get version match info from host")
 
-            if cache_version_match_info:
+            if cache_version_match_info.get('version_match'):
                 host_ids_process = eggroll.table(name=current_version.get('table_name'),
-                                                      namespace=current_version.get('namespace'),
-                                                      create_if_missing=True,
-                                                      error_if_exist=False)
+                                                 namespace=current_version.get('namespace'),
+                                                 create_if_missing=True,
+                                                 error_if_exist=False)
             else:
                 # Recv host_ids_process
                 # table(host_id_process, 1)
                 host_ids_process = get(name=self.transfer_variable.intersect_host_ids_process.name,
-                                     tag=self.transfer_variable.generate_transferid(
-                                         self.transfer_variable.intersect_host_ids_process),
-                                     idx=0)
+                                       tag=self.transfer_variable.generate_transferid(
+                                           self.transfer_variable.intersect_host_ids_process),
+                                       idx=0)
+                version = cache_version_match_info.get('version')
+                # namespace = cache_version_match_info.get('namespace')
+
+                cache_utils.store_cache(dtable=host_ids_process,
+                                        guest_party_id=self.guest_party_id,
+                                        host_party_id=self.host_party_id,
+                                        version=version,
+                                        id_type=self.intersect_cache_param.id_type,
+                                        encrypt_type=self.intersect_cache_param.encrypt_type,
+                                        tag=consts.INTERSECT_CACHE_TAG,
+                                        )
         else:
             # table(host_id_process, 1)
             host_ids_process = get(name=self.transfer_variable.intersect_host_ids_process.name,
@@ -130,25 +143,25 @@ class RsaIntersectionGuest(RsaIntersect):
         # Recv process guest ids
         # table(r^e % n *hash(sid), guest_id_process)
         recv_guest_ids_process = get(name=self.transfer_variable.intersect_guest_ids_process.name,
-                                           tag=self.transfer_variable.generate_transferid(
-                                               self.transfer_variable.intersect_guest_ids_process),
-                                           idx=0)
+                                     tag=self.transfer_variable.generate_transferid(
+                                         self.transfer_variable.intersect_guest_ids_process),
+                                     idx=0)
         LOGGER.info("Get guest_ids_process from Host")
 
         # table(r^e % n *hash(sid), sid, guest_ids_process)
         join_guest_ids_process = exchange_guest_id.join(recv_guest_ids_process,
-                                                                    lambda sid, g: (sid,
-                                                                                    g))
+                                                        lambda sid, g: (sid,
+                                                                        g))
         # table(sid, guest_ids_process)
         sid_guest_ids_process = join_guest_ids_process.map(
             lambda k, v: (v[0], v[1]))
 
         # table(sid, hash(guest_ids_process/r)))
         sid_guest_ids_process_final = sid_guest_ids_process.join(random_value,
-                                                                             lambda g, r: RsaIntersectionGuest.hash(
-                                                                                 gmpy2.divm(int(g), int(r), self.n)
-                                                                             )
-                                                                             )
+                                                                 lambda g, r: RsaIntersectionGuest.hash(
+                                                                     gmpy2.divm(int(g), int(r), self.n)
+                                                                 )
+                                                                 )
 
         # table(hash(guest_ids_process/r), sid)
         guest_ids_process_final_sid = sid_guest_ids_process_final.map(
