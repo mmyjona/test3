@@ -53,6 +53,26 @@ def save_version_info(commit_id, data_table_namespace, version_log, tag, branch)
     version_table.put(branch, commit_id, use_serialize=False)
 
 
+def delete_version(name, namespace, branch=None):
+    try:
+        if not branch:
+            tmp_tag, tmp_branch = get_commit_tmp(commit_id=name, data_table_namespace=namespace)
+            branch = tmp_branch if not branch else branch
+        delete_version_info(commit_id=name, data_table_namespace=namespace, branch=branch)
+        return True
+    except Exception as e:
+        LOGGER.exception(e)
+        return False
+    finally:
+        delete_commit_tmp(commit_id=name, data_table_namespace=namespace)
+
+
+def delete_version_info(commit_id, data_table_namespace, branch):
+    version_table = get_version_table(data_table_namespace=data_table_namespace)
+    version_table.delete(commit_id, use_serialize=False)
+    version_table.delete(branch, use_serialize=False)
+
+
 def get_latest_commit(data_table_namespace, branch="master"):
     version_table = get_version_table(data_table_namespace=data_table_namespace)
     return get_branch_current_commit(version_table=version_table, branch_name=branch)
