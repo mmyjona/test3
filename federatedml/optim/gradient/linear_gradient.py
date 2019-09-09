@@ -146,7 +146,7 @@ class HeteroLinearGradient(object):
             loss_square = 0
             LOGGER.error("Wrong type of role given to compute_loss")
         loss = loss_square.reduce(add)
-        loss = loss / wx.count()
+        loss = loss / data_instances.count()
         return loss
 
     def compute_residual(self, data_instances, wx, encrypted_wx):
