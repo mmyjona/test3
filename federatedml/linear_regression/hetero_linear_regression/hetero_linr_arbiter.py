@@ -168,7 +168,7 @@ class HeteroLinRArbiter(HeteroLinRBase):
                                           self.n_iter_, batch_index),
                                       idx=0)
                 de_loss = self.encrypt_operator.decrypt(loss)
-                iter_loss += de_loss / self.batch_size
+                iter_loss += de_loss
                 LOGGER.info("Get loss from guest:{}".format(de_loss))
 
                 batch_index += 1
