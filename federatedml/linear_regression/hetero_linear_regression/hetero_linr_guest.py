@@ -279,5 +279,5 @@ class HeteroLinRGuest(HeteroLinRBase):
         prediction = guest_partial_prediction.join(host_partial_prediction, lambda g, h: g + h)
         predict_result = data_instances.join(prediction,
                                              lambda inst, pred: [inst.label, float(pred),
-                                                                 float(pred), {"label": round(pred)}])
+                                                                 float(pred), {"prediction": pred}])
         return predict_result
