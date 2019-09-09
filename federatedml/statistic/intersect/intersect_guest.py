@@ -97,7 +97,7 @@ class RsaIntersectionGuest(RsaIntersect):
                                                                                      current_version.get('namespace')))
 
             remote(current_version,
-                   name=self.transfer_variable.cache_version_info,
+                   name=self.transfer_variable.cache_version_info.name,
                    tag=self.transfer_variable.generate_transferid(self.transfer_variable.cache_version_info),
                    role=consts.HOST,
                    idx=0)
