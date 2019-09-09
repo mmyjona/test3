@@ -113,9 +113,9 @@ def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa
         info.f_namespcae = namespace
         info.f_version = version
         info.f_tag = tag
-        info.f_rsa_key_n = str(rsa.n)
-        info.f_rsa_key_d = str(rsa.d)
-        info.f_rsa_key_e = str(rsa.e)
+        info.f_rsa_key_n = str(rsa.get('rsa_n'))
+        info.f_rsa_key_d = str(rsa.get('rsa_d'))
+        info.f_rsa_key_e = str(rsa.get('rsa_e'))
         if is_insert:
             info.save(force_insert=True)
         else:
