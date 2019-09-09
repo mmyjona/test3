@@ -141,7 +141,7 @@ class HeteroLinearGradient(object):
         if type == consts.HOST:
             loss_square = wx.mapValues(lambda v: np.square(v))
         elif type == consts.GUEST:
-            loss_square = wx.join(data_instances, lambda wx, d: np.square(wx - int(d.label)))
+            loss_square = wx.join(data_instances, lambda wx, d: np.square(wx - d.label))
         else:
             loss_square = 0
             LOGGER.error("Wrong type of role given to compute_loss")
