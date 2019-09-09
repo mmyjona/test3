@@ -166,7 +166,7 @@ class HeteroLinearGradient(object):
         d = wx.join(data_instances, lambda wx, d: wx - d.label)
         #LOGGER.debug(list(encrypted_wx.collect()))
         residual = encrypted_wx.join(d, lambda wx,
-                                               d: wx + self.encrypt_operator.encrypt(d))
+                                               d: wx + d)
         #LOGGER.debug(list(residual.collect()))
         return residual
 
