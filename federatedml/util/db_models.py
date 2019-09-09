@@ -26,7 +26,7 @@ from playhouse.pool import PooledMySQLDatabase
 from arch.api.utils import log_utils
 from arch.api.utils.core import current_timestamp
 from fate_flow.entity.constant_config import WorkMode
-from fate_flow.settings import DATABASE, WORK_MODE, stat_logger, USE_LOCAL_DATABASE
+from fate_flow.settings import DATABASE, stat_logger
 
 LOGGER = log_utils.getLogger()
 
@@ -47,22 +47,14 @@ def singleton(cls, *args, **kw):
 class BaseDataBase(object):
     def __init__(self):
         database_config = DATABASE.copy()
-        db_name = database_config.pop("name")
-        if WORK_MODE == WorkMode.STANDALONE:
-            if USE_LOCAL_DATABASE:
-                self.database_connection = APSWDatabase('fate_flow_sqlite.db')
-                stat_logger.info('init sqlite database on standalone mode successfully')
-            else:
-                self.database_connection = PooledMySQLDatabase(db_name, **database_config)
-                stat_logger.info('init mysql database on standalone mode successfully')
-        elif WORK_MODE == WorkMode.CLUSTER:
-            self.database_connection = PooledMySQLDatabase(db_name, **database_config)
-            stat_logger.info('init mysql database on cluster mode successfully')
-        else:
-            raise Exception('can not init database')
+        db_name = database_config.pop("name")     
+        self.database_connection = PooledMySQLDatabase(db_name, **database_config)
+        stat_logger.info('init mysql database on cluster mode successfully')
+
 
 
 DB = BaseDataBase().database_connection
+has_been_init = False
 
 
 def close_connection(db_connection):
@@ -87,6 +79,9 @@ class DataBaseModel(Model):
 
 
 def init_database_tables():
+    global has_been_init
+    if has_been_init:
+        return
     with DB.connection_context():
         members = inspect.getmembers(sys.modules[__name__], inspect.isclass)
         table_objs = []
@@ -94,6 +89,7 @@ def init_database_tables():
             if obj != DataBaseModel and issubclass(obj, DataBaseModel):
                 table_objs.append(obj)
         DB.create_tables(table_objs)
+        has_been_init = True
 
 
 

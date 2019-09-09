@@ -20,7 +20,7 @@ import time
 from arch.api import storage
 from arch.api.utils import log_utils, version_control
 from arch.api.utils.dtable_utils import get_table_info
-from federatedml.util.db_models import DB, IdLibraryCacheInfo
+from federatedml.util.db_models import DB, IdLibraryCacheInfo, init_database_tables
 from arch.api import storage
 from federatedml.util.redis_adaptor import RedisAdaptor
 
@@ -63,6 +63,7 @@ def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeou
             id_type, encrypt_type, tag))
         return None
 
+    init_database_tables()
     with DB.connection_context():
         LOGGER.info('query cache info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}, tag={}'.format(host_party_id, \
             id_type, encrypt_type, namespace, version, tag))
@@ -92,6 +93,7 @@ def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt
     
 
 def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa):
+    init_database_tables()
     with DB.connection_context():
         LOGGER.info('store rsa and out table info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}.'.format(host_party_id, \
             id_type, encrypt_type, namespace, version))
