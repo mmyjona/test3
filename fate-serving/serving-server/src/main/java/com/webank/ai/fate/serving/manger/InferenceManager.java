@@ -125,6 +125,7 @@ public class InferenceManager {
         long startTime = System.currentTimeMillis();
 
         context.setCaseId(inferenceRequest.getCaseid());
+
         ReturnResult inferenceResult = new ReturnResult();
         inferenceResult.setCaseid(inferenceRequest.getCaseid());
         String modelName = inferenceRequest.getModelVersion();
@@ -191,52 +192,60 @@ public class InferenceManager {
         Map<String, Object> modelResult = model.predict(context,modelFeatureData, predictParams);
 
 
-       // boolean getRemotePartyResult = (boolean) federatedParams.getOrDefault("getRemotePartyResult", false);
-        //ReturnResult federatedResult = (ReturnResult) predictParams.get("federatedResult");
-
-        ReturnResult federatedResult = context.getFederatedResult();
-        LOGGER.info(modelResult);
         PostProcessingResult postProcessingResult;
         try {
 
             postProcessingResult = getPostProcessedResult(context,featureData, modelResult);
-
-
+            inferenceResult = postProcessingResult.getProcessingResult();
         } catch (Exception ex) {
             LOGGER.error("model result postprocessing failed", ex);
             inferenceResult.setRetcode(InferenceRetCode.COMPUTE_ERROR);
             inferenceResult.setRetmsg(ex.getMessage());
-            return inferenceResult;
-        }
-        inferenceResult = postProcessingResult.getProcessingResult();
-        inferenceResult.setCaseid(inferenceRequest.getCaseid());
-        boolean getRemotePartyResult = (boolean)context.getDataOrDefault(Dict.GET_REMOTE_PARTY_RESULT,false);
-        boolean billing = true;
-        if (! getRemotePartyResult) {
-            billing = false;
-        } else if (federatedResult.getRetcode() == InferenceRetCode.GET_FEATURE_FAILED || federatedResult.getRetcode() == InferenceRetCode.INVALID_FEATURE || federatedResult.getRetcode() == InferenceRetCode.NO_FEATURE) {
-            billing = false;
-        }
-        int partyInferenceRetcode = 0;
-        if (inferenceResult.getRetcode() != 0) {
-            partyInferenceRetcode += 1;
-        }
-        if (federatedResult.getRetcode() != 0) {
-            partyInferenceRetcode += 2;
-            inferenceResult.setRetcode(federatedResult.getRetcode());
-        }
-        inferenceResult.setRetcode(inferenceResult.getRetcode() + partyInferenceRetcode * 1000);
-        long endTime = System.currentTimeMillis();
-        long inferenceElapsed = endTime - startTime;
-        logInference(context,inferenceRequest, modelNamespaceData, inferenceResult, inferenceElapsed, getRemotePartyResult, billing);
 
-        inferenceResult=postProcessing.handleResult(context,inferenceResult);
+        }
+        inferenceResult = handleResult(context,inferenceRequest,modelNamespaceData,inferenceResult);
 
 
         return inferenceResult;
     }
 
-    public static ReturnResult federatedInference(Context  context,Map<String, Object> federatedParams) {
+    private  static ReturnResult  handleResult(Context  context,InferenceRequest inferenceRequest ,ModelNamespaceData modelNamespaceData  ,ReturnResult   inferenceResult){
+
+        boolean getRemotePartyResult = (boolean) context.getDataOrDefault(Dict.GET_REMOTE_PARTY_RESULT, false);
+        boolean billing = true;
+        try {
+            inferenceResult.setCaseid(context.getCaseId());
+            ReturnResult federatedResult = context.getFederatedResult();
+            if (!getRemotePartyResult) {
+                billing = false;
+            } else if (federatedResult != null) {
+
+                if (federatedResult.getRetcode() == InferenceRetCode.GET_FEATURE_FAILED || federatedResult.getRetcode() == InferenceRetCode.INVALID_FEATURE || federatedResult.getRetcode() == InferenceRetCode.NO_FEATURE) {
+                    billing = false;
+                }
+            }
+            int partyInferenceRetcode = 0;
+            if (inferenceResult.getRetcode() != 0) {
+                partyInferenceRetcode += 1;
+            }
+            if (federatedResult.getRetcode() != 0) {
+                partyInferenceRetcode += 2;
+                inferenceResult.setRetcode(federatedResult.getRetcode());
+            }
+            inferenceResult.setRetcode(inferenceResult.getRetcode() + partyInferenceRetcode * 1000);
+            inferenceResult=postProcessing.handleResult(context,inferenceResult);
+            return  inferenceResult;
+        }finally {
+            long endTime = System.currentTimeMillis();
+            long inferenceElapsed = endTime - context.getTimeStamp();
+            logInference(context,inferenceRequest, modelNamespaceData, inferenceResult, inferenceElapsed, getRemotePartyResult, billing);
+
+        }
+
+    }
+
+
+    public static ReturnResult federatedInference(Context  context,Map<String,Object> federatedParams) {
         long startTime = System.currentTimeMillis();
         ReturnResult returnResult = new ReturnResult();
         //TODO: Very ugly, need to be optimized
