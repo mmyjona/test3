@@ -14,12 +14,13 @@
 #  limitations under the License.
 #
 import datetime
+import threading
 import time
 
+from arch.api import storage, eggroll
 from arch.api.utils import log_utils, version_control
 from arch.api.utils.dtable_utils import get_table_info
 from federatedml.util.db_models import DB, IdLibraryCacheInfo, init_database_tables
-from arch.api import storage
 from federatedml.util.redis_adaptor import RedisAdaptor
 
 LOGGER = log_utils.getLogger()
@@ -111,13 +112,44 @@ def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa
         info.f_namespcae = namespace
         info.f_version = version
         info.f_tag = tag
-        info.f_rsa_key_n = str(rsa.n)
-        info.f_rsa_key_d = str(rsa.d)
-        info.f_rsa_key_e = str(rsa.e)
+        info.f_rsa_key_n = str(rsa.get('rsa_n'))
+        info.f_rsa_key_d = str(rsa.get('rsa_d'))
+        info.f_rsa_key_e = str(rsa.get('rsa_e'))
         if is_insert:
             info.save(force_insert=True)
         else:
             info.save()
+
+
+def clean_all_cache(host_party_id, id_type, encrypt_type, tag='Za', guest_party_id=None):
+    namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
+    eggroll.cleanup(name='*', namespace=namespace, persistent=True)
+    version_table = version_control.get_version_table(data_table_namespace=namespace)
+    version_table.destroy()
+
+
+def clean_cache(namespace, version):
+    eggroll.cleanup(name=version, namespace=namespace, persistent=True)
+    version_control.delete_version(version, namespace)
+
+
+def clean_all_rsa(host_party_id, id_type, encrypt_type, tag='Za'):
+    init_database_tables()
+    with DB.connection_context():
+        LOGGER.info('clean rsa and out table info, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
+            id_type, encrypt_type, tag))
+        IdLibraryCacheInfo.delete().where(IdLibraryCacheInfo.f_party_id == host_party_id, \
+            IdLibraryCacheInfo.f_id_type == id_type, IdLibraryCacheInfo.f_encrypt_type == encrypt_type, \
+            IdLibraryCacheInfo.f_tag == tag)
+
+
+def clean_rsa(namespace, version):
+    init_database_tables()
+    with DB.connection_context():
+        LOGGER.info('clean rsa and out table info, namespace={}, version={}.'.format(namespace, version))
+        IdLibraryCacheInfo.delete().where(IdLibraryCacheInfo.f_party_id == namespace, \
+            IdLibraryCacheInfo.f_version == version)
+
 
 
 '''
