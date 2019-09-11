@@ -18,7 +18,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
+from arch.api.utils import log_utils
 from federatedml.ftl.eggroll_computation.helper import distribute_compute_sum_XY
+
+LOGGER = log_utils.getLogger()
 
 
 class Autoencoder(object):
@@ -28,9 +31,13 @@ class Autoencoder(object):
         self.id = str(an_id)
         self.sess = None
         self.built = False
-        self.lr = None
+        self.init_learning_rate = None
         self.input_dim = None
         self.hidden_dim = None
+        self.learning_rate_decay_func = None
+
+    def set_learning_rate_decay_function(self, learning_rate_decay_func):
+        self.learning_rate_decay_func = learning_rate_decay_func
 
     def set_session(self, sess):
         self.sess = sess
@@ -42,7 +49,7 @@ class Autoencoder(object):
         if self.built:
             return
 
-        self.lr = learning_rate
+        self.init_learning_rate = learning_rate
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
 
@@ -66,6 +73,7 @@ class Autoencoder(object):
 
     def _add_input_placeholder(self):
         self.X_in = tf.placeholder(tf.float64, shape=(None, self.input_dim))
+        self.learning_rate_placeholder = tf.placeholder(dtype=tf.float64)
 
     def _add_encoder_decoder_ops(self):
         self.encoder_vars_scope = self.id + "_encoder_vars"
@@ -86,20 +94,22 @@ class Autoencoder(object):
     def _add_representation_training_ops(self):
         vars_to_train = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.encoder_vars_scope)
         self.init_grad = tf.placeholder(tf.float64, shape=(None, self.hidden_dim))
-        self.train_op = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(loss=self.Z, var_list=vars_to_train,
-                                                                               grad_loss=self.init_grad)
+        self.train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate_placeholder) \
+            .minimize(loss=self.Z,
+                      var_list=vars_to_train,
+                      grad_loss=self.init_grad)
 
     def _add_e2e_training_ops(self):
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.logits, labels=self.X_in))
-        self.e2e_train_op = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.loss)
+        self.e2e_train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate_placeholder).minimize(self.loss)
 
     def _add_encrypt_grad_update_ops(self):
         self.Z_grads = tf.gradients(self.Z, xs=[self.Wh, self.bh])
 
         self.grads_W_new = tf.placeholder(tf.float64, shape=[self.input_dim, self.hidden_dim])
         self.grads_b_new = tf.placeholder(tf.float64, shape=[self.hidden_dim])
-        self.new_Wh = self.Wh.assign(self.Wh - self.lr * self.grads_W_new)
-        self.new_bh = self.bh.assign(self.bh - self.lr * self.grads_b_new)
+        self.new_Wh = self.Wh.assign(self.Wh - self.learning_rate_placeholder * self.grads_W_new)
+        self.new_bh = self.bh.assign(self.bh - self.learning_rate_placeholder * self.grads_b_new)
 
     def _forward_hidden(self, X):
         return tf.sigmoid(tf.matmul(X, self.Wh) + self.bh)
@@ -132,14 +142,27 @@ class Autoencoder(object):
         encrypt_grads_b = distribute_compute_sum_XY(encrypt_grads, grads_b)
         return encrypt_grads_W, encrypt_grads_b
 
-    def apply_gradients(self, gradients):
+    def apply_gradients(self, gradients, epoch=None):
         grads_W = gradients[0]
         grads_b = gradients[1]
-        _, _ = self.sess.run([self.new_Wh, self.new_bh],
-                             feed_dict={self.grads_W_new: grads_W, self.grads_b_new: grads_b})
 
-    def backpropogate(self, X, y, in_grad):
-        self.sess.run(self.train_op, feed_dict={self.X_in: X, self.init_grad: in_grad})
+        current_lr = self.init_learning_rate if self.learning_rate_decay_func is None \
+            else self.learning_rate_decay_func(init_learning_rate=self.init_learning_rate, epoch=epoch)
+        self.sess.run([self.new_Wh, self.new_bh],
+                      feed_dict={self.grads_W_new: grads_W,
+                                 self.grads_b_new: grads_b,
+                                 self.learning_rate_placeholder: current_lr})
+
+    def backpropagate(self, X, y, in_grad, epoch=None):
+        current_lr = self.init_learning_rate if self.learning_rate_decay_func is None \
+            else self.learning_rate_decay_func(init_learning_rate=self.init_learning_rate, epoch=epoch)
+
+        if self.learning_rate_decay_func is not None:
+            LOGGER.info("at epoch {0}, learning rate of autoencoder [{1}] decays from {2} to {3}".
+                        format(epoch, self.id, self.init_learning_rate, current_lr))
+        self.sess.run(self.train_op, feed_dict={self.X_in: X,
+                                                self.init_grad: in_grad,
+                                                self.learning_rate_placeholder: current_lr})
 
     def predict(self, X):
         return self.sess.run(self.X_hat, feed_dict={self.X_in: X})
@@ -153,7 +176,7 @@ class Autoencoder(object):
         _bh = self.sess.run(self.bh)
         _bo = self.sess.run(self.bo)
 
-        hyperparameters = {"learning_rate": self.lr,
+        hyperparameters = {"learning_rate": self.init_learning_rate,
                            "input_dim": self.input_dim,
                            "hidden_dim": self.hidden_dim}
         return {"Wh": _Wh, "bh": _bh, "Wo": _Wo, "bo": _bo, "hyperparameters": hyperparameters}
@@ -165,7 +188,7 @@ class Autoencoder(object):
         self.bo_initializer = model_parameters["bo"]
         model_meta = model_parameters["hyperparameters"]
 
-        self.lr = model_meta["learning_rate"]
+        self.init_learning_rate = model_meta["learning_rate"]
         self.input_dim = model_meta["input_dim"]
         self.hidden_dim = model_meta["hidden_dim"]
         self._build_model()
@@ -177,7 +200,9 @@ class Autoencoder(object):
         for ep in range(epoch):
             for i in range(n_batches + 1):
                 batch = X[i * batch_size: i * batch_size + batch_size]
-                _, c = self.sess.run([self.e2e_train_op, self.loss], feed_dict={self.X_in: batch})
+                _, c = self.sess.run([self.e2e_train_op, self.loss],
+                                     feed_dict={self.X_in: batch,
+                                                self.learning_rate_placeholder: self.init_learning_rate})
                 if i % 5 == 0:
                     print(i, "/", n_batches, "cost:", c)
                 costs.append(c)

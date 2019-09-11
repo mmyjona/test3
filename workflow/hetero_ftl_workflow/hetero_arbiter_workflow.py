@@ -31,6 +31,15 @@ class FTLArbiterWorkFlow(FTLWorkFlow):
     def train(self, data_instance, validation_data=None):
         self.ftl_arbiter.fit()
 
+    def run(self):
+        self._init_argument()
+        if self.workflow_param.method == "train":
+            self.train(data_instance=None)
+        elif self.workflow_param.method == "predict":
+            pass
+        else:
+            raise TypeError("method {0} is not support yet".format(self.workflow_param.method))
+
 
 if __name__ == "__main__":
     conf = sys.argv[1]

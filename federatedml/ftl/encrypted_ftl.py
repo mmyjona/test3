@@ -47,7 +47,7 @@ class EncryptedFTLGuestModel(PlainFTLGuestModel):
         if self.is_min_gen_enc:
             self.logger.debug("using min_gen_enc")
 
-            self._compute_components()
+            self.compute_components()
 
             # phi has shape (1, feature_dim)
             # phi_2 has shape (feature_dim, feature_dim)
@@ -140,8 +140,8 @@ class EncryptedFTLGuestModel(PlainFTLGuestModel):
     def send_gradients(self):
         return [self.enc_grads_W, self.enc_grads_b]
 
-    def receive_gradients(self, gradients):
-        self.localModel.apply_gradients(gradients)
+    def receive_gradients(self, gradients, epoch=None):
+        self.localModel.apply_gradients(gradients, epoch=epoch)
 
     def send_loss(self):
         return self.loss
@@ -190,7 +190,7 @@ class EncryptedFTLHostModel(PlainFTLHostModel):
         if self.is_min_gen_enc:
             self.logger.debug("using min_gen_enc")
 
-            self._compute_components()
+            self.compute_components()
 
             # enc_uB_overlap has shape (len(overlap_indexes), feature_dim)
             # enc_uB_overlap_2 has shape (len(overlap_indexes), feature_dim, feature_dim)
@@ -237,8 +237,8 @@ class EncryptedFTLHostModel(PlainFTLHostModel):
     def send_gradients(self):
         return [self.enc_grads_W, self.enc_grads_b]
 
-    def receive_gradients(self, gradients):
-        self.localModel.apply_gradients(gradients)
+    def receive_gradients(self, gradients, epoch=None):
+        self.localModel.apply_gradients(gradients, epoch=epoch)
 
     def get_loss_grads(self):
         return self.loss_grads

@@ -418,10 +418,10 @@ class HeteroDecentralizedEncryptFTLHost(HeteroFTLHost):
                              format(local_iter, gradient_decryption_time))
 
                 # update host model parameters using these gradients.
-                self.host_model.receive_gradients(cleared_dec_host_gradients)
+                self.host_model.receive_gradients(cleared_dec_host_gradients, epoch=self.n_iter_)
 
                 if local_iter != self.local_iterations - 1:
-                    self.host_model._compute_components()
+                    self.host_model.compute_components()
                     
                 local_iter_end_time = time.time()
                 local_iter_spending_time = local_iter_end_time - local_iter_start_time

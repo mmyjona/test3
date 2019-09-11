@@ -5,9 +5,9 @@ import numpy as np
 from arch.api import eggroll
 from arch.api.utils import log_utils
 from federatedml.ftl.data_util.common_data_util import add_random_mask, remove_random_mask
-from research.hetero_dnn_logistic_regression.federation_client import FATEFederationClient
 from federatedml.util import consts
-from federatedml.util.transfer_variable import HeteroDNNLRTransferVariable
+from federatedml.util.transfer_variable.hetero_dnn_lr_transfer_variable import HeteroDNNLRTransferVariable
+from research.hetero_dnn_logistic_regression.federation_client import FATEFederationClient
 
 LOGGER = log_utils.getLogger()
 
@@ -101,7 +101,7 @@ class BaseLocalModelUpdateProxy(object):
 
         LOGGER.debug("@ grads * coef:" + str(grads.shape) + "*" + str(coef.shape))
         back_grad = grads * coef
-        self.model.backpropogate(feats, None, back_grad)
+        self.model.backpropagate(feats, None, back_grad)
 
 
 class PlainLocalModelUpdateProxy(BaseLocalModelUpdateProxy):
@@ -163,7 +163,7 @@ class PlainLocalModelUpdateProxy(BaseLocalModelUpdateProxy):
         end = time.time()
         LOGGER.debug("@ decryption time (including communication):" + str(end - start))
 
-        self.model.backpropogate(feats, None, dec_back_grad)
+        self.model.backpropagate(feats, None, dec_back_grad)
 
     def _decrypt_gradients(self, enc_grads, is_host, n_iter, batch_index):
 

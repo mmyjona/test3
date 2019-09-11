@@ -78,13 +78,16 @@ class LocalModelParam(BaseParam):
     learning_rate: float, default: 0.001
         The learning rate for training model, must between 0 and 1 exclusively
 
+    apply_learning_rate_decay: bool, default: False
+        The indicator indicating whether applying learning rate decay or not
 
     """
 
-    def __init__(self, input_dim=None, encode_dim=5, learning_rate=0.001):
+    def __init__(self, input_dim=None, encode_dim=5, learning_rate=0.001, apply_learning_rate_decay=False):
         self.input_dim = input_dim
         self.encode_dim = encode_dim
         self.learning_rate = learning_rate
+        self.apply_learning_rate_decay = apply_learning_rate_decay
 
     def check(self):
         model_param_descr = "local model param's "
@@ -92,6 +95,7 @@ class LocalModelParam(BaseParam):
             self.check_positive_integer(self.input_dim, model_param_descr + "input_dim")
         self.check_positive_integer(self.encode_dim, model_param_descr + "encode_dim")
         self.check_open_unit_interval(self.learning_rate, model_param_descr + "learning_rate")
+        self.check_boolean(self.apply_learning_rate_decay, model_param_descr + "apply_learning_rate_decay")
         return True
 
 

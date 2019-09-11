@@ -42,7 +42,7 @@ class FasterEncryptedFTLGuestModel(PlainFTLGuestModel):
         self.private_key = private_key
 
     def send_components(self):
-        self._compute_components()
+        self.compute_components()
         # Note: send phi_2 to host for computing a component of the loss
         components = [self.y_overlap_phi, self.mapping_comp_A, self.phi, self.phi_2]
         return self.__encrypt_components(components)
@@ -173,7 +173,7 @@ class FasterEncryptedFTLHostModel(PlainFTLHostModel):
         self.private_key = private_key
 
     def send_components(self):
-        self._compute_components()
+        self.compute_components()
         components = [self.uB_overlap, self.mapping_comp_B]
         return self.__encrypt_components(components)
 

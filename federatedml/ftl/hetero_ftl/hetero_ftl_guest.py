@@ -323,6 +323,8 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
 
         start_time = time.time()
         is_stop = False
+
+        # TODO: refactor self.n_iter_ since this may introduce bug
         while self.n_iter_ < self.max_iter:
             global_iteration_start = time.time()
 
@@ -433,7 +435,7 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
                              format(local_iter, gradient_decryption_time))
 
                 # update guest model parameters using these gradients.
-                self.guest_model.receive_gradients(cleared_dec_guest_gradients)
+                self.guest_model.receive_gradients(cleared_dec_guest_gradients, epoch=self.n_iter_)
 
                 if local_iter == 0:
                     masked_dec_loss = self._do_get(name=self.transfer_variable.masked_dec_loss.name,
@@ -445,7 +447,7 @@ class HeteroDecentralizedEncryptFTLGuest(HeteroFTLGuest):
                     loss = remove_random_mask(masked_dec_loss, loss_mask)
 
                 if local_iter != self.local_iterations - 1:
-                    self.guest_model._compute_components()
+                    self.guest_model.compute_components()
 
                 local_iter_end_time = time.time()
                 local_iter_spending_time = local_iter_end_time - local_iter_start_time

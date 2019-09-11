@@ -21,6 +21,7 @@ import tensorflow as tf
 from arch.api.utils import log_utils
 from federatedml.ftl.autoencoder import Autoencoder
 from federatedml.ftl.hetero_ftl.hetero_ftl_guest import GuestFactory
+from federatedml.ftl.learning_rate_decay import sqrt_epoch_decay
 from workflow.hetero_ftl_workflow.hetero_workflow import FTLWorkFlow
 
 LOGGER = log_utils.getLogger()
@@ -40,9 +41,11 @@ class FTLGuestWorkFlow(FTLWorkFlow):
         autoencoder = Autoencoder("local_ftl_guest_model_01")
         autoencoder.build(input_dim=ftl_data_model_param.n_feature_guest, hidden_dim=ftl_local_model_param.encode_dim,
                           learning_rate=ftl_local_model_param.learning_rate)
+        if ftl_local_model_param.apply_learning_rate_decay:
+            autoencoder.set_learning_rate_decay_function(sqrt_epoch_decay)
         return autoencoder
 
-    def train(self, train_data_instance, validation_data=None):
+    def train(self, train_data_instance, validation_data_instance=None):
         LOGGER.debug("@ enter guest workflow train function")
         init = tf.global_variables_initializer()
         with tf.Session() as sess:
@@ -51,9 +54,9 @@ class FTLGuestWorkFlow(FTLWorkFlow):
             self.model.fit(train_data_instance)
             self.model.save_model(self.workflow_param.model_table, self.workflow_param.model_namespace)
             self.model.predict(train_data_instance)
-            if validation_data is not None:
+            if validation_data_instance is not None:
                 LOGGER.debug("@ validation")
-                self.model.predict(validation_data)
+                self.model.predict(validation_data_instance)
 
     def predict(self, data_instance):
         LOGGER.debug("@ enter guest workflow predict function")
@@ -64,6 +67,24 @@ class FTLGuestWorkFlow(FTLWorkFlow):
             self.ftl_local_model.set_session(sess)
             sess.run(init)
             self.model.predict(data_instance)
+
+    def run(self):
+        self._init_argument()
+        if self.workflow_param.method == "train":
+            data_instance = self.gen_data_instance(self.workflow_param.train_input_table,
+                                                   self.workflow_param.train_input_namespace)
+
+            # valid_instance = self.gen_validation_data_instance(self.workflow_param.predict_input_table,
+            #                                                    self.workflow_param.predict_input_namespace)
+            # self.train(data_instance, valid_instance)
+            self.train(data_instance, data_instance)
+
+        elif self.workflow_param.method == "predict":
+            data_instance = self.gen_data_instance(self.workflow_param.predict_input_table,
+                                                   self.workflow_param.predict_input_namespace)
+            self.predict(data_instance)
+        else:
+            raise TypeError("method {0} is not support yet".format(self.workflow_param.method))
 
 
 if __name__ == "__main__":

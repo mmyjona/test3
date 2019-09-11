@@ -55,6 +55,12 @@ class PlainFTLGuestModel(PartyModelInterface):
         self.is_trace = is_trace
         self.logger = LOGGER
 
+        self.X = None
+        self.y = None
+        self.non_overlap_indexes = None
+        self.overlap_indexes = None
+        self.phi = None
+
     def set_batch(self, X, y, non_overlap_indexes=None, overlap_indexes=None):
         self.X = X
         self.y = y
@@ -66,7 +72,7 @@ class PlainFTLGuestModel(PartyModelInterface):
         length_y = len(y)
         return np.expand_dims(np.sum(y * uA, axis=0) / length_y, axis=0)
 
-    def _compute_components(self):
+    def compute_components(self):
         self.uA = self.localModel.transform(self.X)
         # phi has shape (1, feature_dim)
         # phi_2 has shape (feature_dim, feature_dim)
@@ -99,7 +105,7 @@ class PlainFTLGuestModel(PartyModelInterface):
             self.logger.debug("mapping_comp_A shape" + str(self.mapping_comp_A.shape))
 
     def send_components(self):
-        self._compute_components()
+        self.compute_components()
         return [self.y_overlap_2_phi_2, self.y_overlap_phi, self.mapping_comp_A]
 
     def receive_components(self, components):
@@ -139,7 +145,7 @@ class PlainFTLGuestModel(PartyModelInterface):
         loss_grad_A[self.non_overlap_indexes, :] = grad_A_nonoverlap
         loss_grad_A[self.overlap_indexes, :] = grad_A_overlap
         self.loss_grads = loss_grad_A
-        self.localModel.backpropogate(self.X, self.y, loss_grad_A)
+        self.localModel.backpropagate(self.X, self.y, loss_grad_A)
 
     def send_loss(self):
         return self.loss
@@ -189,7 +195,7 @@ class PlainFTLHostModel(PartyModelInterface):
         self.X = X
         self.overlap_indexes = overlap_indexes
 
-    def _compute_components(self):
+    def compute_components(self):
         self.uB = self.localModel.transform(self.X)
 
         # following three parameters will be sent to guest
@@ -206,7 +212,7 @@ class PlainFTLHostModel(PartyModelInterface):
             self.logger.debug("mapping_comp_B shape" + str(self.mapping_comp_B.shape))
 
     def send_components(self):
-        self._compute_components()
+        self.compute_components()
         return [self.uB_overlap, self.uB_overlap_2, self.mapping_comp_B]
 
     def receive_components(self, components):
@@ -228,7 +234,7 @@ class PlainFTLHostModel(PartyModelInterface):
         l1_grad_B = np.squeeze(uB_overlap_y_overlap_2_phi_2, axis=1) + self.y_overlap_phi
         loss_grad_B = self.alpha * l1_grad_B + self.mapping_comp_A
         self.loss_grads = loss_grad_B
-        self.localModel.backpropogate(self.X[self.overlap_indexes], None, loss_grad_B)
+        self.localModel.backpropagate(self.X[self.overlap_indexes], None, loss_grad_B)
 
     def get_loss_grads(self):
         return self.loss_grads

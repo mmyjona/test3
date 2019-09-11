@@ -127,25 +127,9 @@ class FTLWorkFlow(object):
     def gen_data_instance(self, table, namespace):
         pass
 
-    def train(self, train_data_instance, validation_data=None):
+    def train(self, train_data_instance, validation_data_instance=None):
         pass
 
     def predict(self, data_instance):
         pass
 
-    def run(self):
-        self._init_argument()
-        if self.workflow_param.method == "train":
-            data_instance = self.gen_data_instance(self.workflow_param.train_input_table,
-                                                   self.workflow_param.train_input_namespace)
-
-            valid_instance = self.gen_validation_data_instance(self.workflow_param.predict_input_table,
-                                                               self.workflow_param.predict_input_namespace)
-            self.train(data_instance, valid_instance)
-
-        elif self.workflow_param.method == "predict":
-            data_instance = self.gen_data_instance(self.workflow_param.predict_input_table,
-                                                   self.workflow_param.predict_input_namespace)
-            self.predict(data_instance)
-        else:
-            raise TypeError("method %s is not support yet" % (self.workflow_param.method))

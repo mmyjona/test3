@@ -60,13 +60,14 @@
             "eps": 0.1,
             "alpha": 100,
             "max_iter": 10,
-            "local_iterations": 3,
+            "local_iterations": 1,
             "is_encrypt": true,
             "enc_ftl": "dct_enc_ftl"
     },
     "LocalModelParam": {
             "encode_dim": 32,
-            "learning_rate": 0.01
+            "learning_rate": 0.01,
+            "apply_learning_rate_decay": false
     },
     "FTLDataParam": {
             "file_path" : "../data/UCI_Credit_Card.csv",
