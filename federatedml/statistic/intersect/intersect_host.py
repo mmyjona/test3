@@ -15,6 +15,7 @@
 #
 
 import hashlib
+from time import time
 
 from arch.api import eggroll
 from arch.api.federation import remote, get
@@ -67,11 +68,14 @@ class RsaIntersectionHost(RsaIntersect):
         LOGGER.info("Start rsa intersection")
 
         if self.use_cache:
+            t1 = time()
             LOGGER.info("Using intersection cache scheme, start to getting rsa key from cache.")
             rsa_key = cache_utils.get_rsa_of_current_version(host_party_id=self.host_party_id,
                                                              id_type=self.intersect_cache_param.id_type,
                                                              encrypt_type=self.intersect_cache_param.encrypt_type,
                                                              tag='Za')
+            t2 = time()
+            LOGGER.debug("[intersect_cache] read rsa from cache:{}".format(t2 - t1))
             if rsa_key is not None:
                 self.e = rsa_key.get('rsa_e')
                 self.d = rsa_key.get('rsa_d')
@@ -82,6 +86,8 @@ class RsaIntersectionHost(RsaIntersect):
                 LOGGER.info("Stay to generate rsa key")
 
                 self.e, self.d, self.n = self.generate_rsa_key()
+                t3 = time()
+                LOGGER.debug("[intersect_cache] read rsa from cache failed, generate new one:{}".format(t3 - t2))
         else:
             LOGGER.info("Generate rsa keys.")
             self.e, self.d, self.n = self.generate_rsa_key()
@@ -100,6 +106,7 @@ class RsaIntersectionHost(RsaIntersect):
         # (host_id_process, 1)
         if self.use_cache:
             if self.has_cache_version:
+                t4 = time()
                 self.current_version = cache_utils.host_get_current_verison(host_party_id=self.host_party_id,
                                                                             id_type=self.intersect_cache_param.id_type,
                                                                             encrypt_type=self.intersect_cache_param.encrypt_type,
@@ -117,7 +124,11 @@ class RsaIntersectionHost(RsaIntersect):
                 else:
                     self.is_version_match = False
 
+                t5 = time()
+                LOGGER.debug("[intersect_cache] check version match cost:{}".format(t5 - t4))
+
                 if not self.is_version_match or self.synchronize_intersect_ids:
+                    t6 = time()
                     # if self.synchronize_intersect_ids is true, host will get the encrypted intersect id from guest,
                     # which need the Za to decrypt them
                     LOGGER.info("read Za from cache")
@@ -125,11 +136,20 @@ class RsaIntersectionHost(RsaIntersect):
                                                           namespace=self.current_version.get('namespace'),
                                                           create_if_missing=True,
                                                           error_if_exist=False)
+                    t7 = time()
+                    LOGGER.debug("[intersect_cache] read host_ids_process_pair from cache:{}".format(t7 - t6))
                     if check_eq(host_ids_process_pair.count(), 0):
                         host_ids_process_pair = self.cal_host_ids_process_pair(data_instances)
+                        t8 = time()
+                        LOGGER.debug("[intersect_cache] read host_ids_process_pair from cache failed, generate new:{}".format(t8 - t7))
             else:
+                t9 = time()
                 self.is_version_match = False
                 host_ids_process_pair = self.cal_host_ids_process_pair(data_instances)
+                t10 = time()
+                LOGGER.debug(
+                    "[intersect_cache] host_ids_process_pair cost:{}".format(t10 - t9))
+
                 store_cache_ret = cache_utils.store_cache(dtable=host_ids_process_pair,
                                                           guest_party_id=self.guest_party_id,
                                                           host_party_id=self.host_party_id,
@@ -137,6 +157,9 @@ class RsaIntersectionHost(RsaIntersect):
                                                           id_type=self.intersect_cache_param.id_type,
                                                           encrypt_type=self.intersect_cache_param.encrypt_type,
                                                           tag='Za')
+                t11 = time()
+                LOGGER.debug("[intersect_cache] save host_ids_process_pair to cache cost:{}".format(t11 - t10))
+
                 version = store_cache_ret.get('table_name')
                 namespace = store_cache_ret.get('namespace')
                 cache_utils.store_rsa(host_party_id=self.host_party_id,
@@ -146,6 +169,8 @@ class RsaIntersectionHost(RsaIntersect):
                                       namespace=namespace,
                                       version=version,
                                       rsa={'rsa_e': self.e, 'rsa_d': self.d, 'rsa_n': self.n})
+                t12 = time()
+                LOGGER.debug("[intersect_cache] save rsa to cache cost:{}".format(t12 - t11))
 
             LOGGER.info("version_match:{}".format(self.is_version_match))
 
@@ -162,13 +187,16 @@ class RsaIntersectionHost(RsaIntersect):
             LOGGER.info("calculate Za using raw id")
             host_ids_process_pair = self.cal_host_ids_process_pair(data_instances)
 
-        if self.use_cache and not self.is_version_match:
+        if self.use_cache and not self.is_version_match or not self.use_cache:
+            t13 = time()
             host_ids_process = host_ids_process_pair.mapValues(lambda v: 1)
             remote(host_ids_process,
                    name=self.transfer_variable.intersect_host_ids_process.name,
                    tag=self.transfer_variable.generate_transferid(self.transfer_variable.intersect_host_ids_process),
                    role=consts.GUEST,
                    idx=0)
+            t14 = time()
+            LOGGER.debug("[intersect_cache] send host id process:{}".format(t14-t13))
 
             LOGGER.info("Remote host_ids_process to Guest.")
 

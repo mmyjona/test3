@@ -51,7 +51,11 @@ class IntersectModelBase(ModelBase):
 
     def fit(self, data):
         self.__init_intersect_method()
+        from time import time
+        s_time = time()
         self.intersect_ids = self.intersection_obj.run(data)
+        e_time = time()
+        LOGGER.debug("[intersect_cache]{} intersect using time:{}".format(self.role, e_time-s_time))
         LOGGER.info("Finish intersection")
 
         if self.intersect_ids:
@@ -67,6 +71,7 @@ class IntersectModelBase(ModelBase):
                                      metric_meta=MetricMeta(name=self.metric_name, metric_type=self.metric_type))
 
     def save_data(self):
+        LOGGER.debug("intersect_ids:{}".format(self.intersect_ids.count()))
         return self.intersect_ids
 
     def run(self, component_parameters=None, args=None):
