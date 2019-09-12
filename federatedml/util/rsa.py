@@ -42,7 +42,6 @@ class RsaModel(ModelBase):
 
 
     def fit(self, data_inst):
-        #self.test_cache(data_inst)
         LOGGER.info("RsaModel start fit...")
         LOGGER.debug("data_inst={}, count={}".format(data_inst, data_inst.count()))
 
@@ -76,27 +75,6 @@ class RsaModel(ModelBase):
             lambda k, v: (
                 RsaModel.hash(gmpy_math.powmod(int(RsaModel.hash(k), 16), key_pair["d"], key_pair["n"])), k)
         )
-        
-        data_processed = data_processed_pair.mapValues(lambda v: 1)
 
-        return data_processed
+        return data_processed_pair
 
-    '''
-    def test_cache(self, data_inst):
-        host_id = 10001
-        guest_party_id = 10000
-        id_type = 'imei'
-        encrypt_type = 'md5'
-        tag = 'Za'
-        host_table_info = host_get_current_verison(host_id, id_type, encrypt_type, tag, timeout=10)
-        LOGGER.info('host_current_verion={}'.format(host_table_info))
-
-        guest_table_info = guest_get_current_version(host_id, guest_party_id, id_type, encrypt_type, tag, timeout=10)
-        LOGGER.info('guest_current_version={}'.format(guest_table_info))
-
-        rsa_key = get_rsa_of_current_version(host_id, id_type, encrypt_type, tag)
-        LOGGER.info('rsa_key={}.'.format(rsa_key))
-        LOGGER.info('start store data_inst={}'.format(data_inst))
-        namespace, version = store_cache(data_inst, guest_party_id, host_id, host_table_info.get('table_name'), id_type, encrypt_type, tag)
-        LOGGER.info('store data at {}:{}'.format(namespace, version))
-    '''
