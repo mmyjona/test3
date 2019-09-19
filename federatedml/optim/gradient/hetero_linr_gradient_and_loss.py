@@ -207,6 +207,9 @@ class Host(hetero_gradient_sync.Host, loss_sync.Host):
 
 
 class Arbiter(hetero_gradient_sync.Arbiter, loss_sync.Arbiter):
+    def __init__(self):
+        self.has_multiple_hosts = False
+
     def register_gradient_procedure(self, transfer_variables):
         self._register_gradient_sync(transfer_variables.guest_gradient,
                                      transfer_variables.host_gradient,
@@ -234,6 +237,8 @@ class Arbiter(hetero_gradient_sync.Arbiter, loss_sync.Arbiter):
         host_gradients, guest_gradient = self.get_local_gradient(current_suffix)
         #LOGGER.debug("at Arbiter's end, Guest gradient's type is {}".format(type(guest_gradient[0])))
 
+        if len(host_gradients) > 1:
+            self.has_multiple_hosts = True
 
         host_gradients = [np.array(h) for h in host_gradients]
         guest_gradient = np.array(guest_gradient)
@@ -258,6 +263,9 @@ class Arbiter(hetero_gradient_sync.Arbiter, loss_sync.Arbiter):
         """
         Decrypt loss from guest
         """
+        if self.has_multiple_hosts:
+            LOGGER.info("Has more than one host, loss is not available")
+            return []
         current_suffix = (n_iter_, batch_index)
         loss_list = self.sync_loss_info(suffix=current_suffix)
         de_loss_list = cipher.decrypt_list(loss_list)
