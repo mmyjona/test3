@@ -82,6 +82,7 @@ def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeou
 def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za', namespace=None):
     if namespace is None:
         namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
+        LOGGER.debug(namespace)
     table_config = {}
     table_config['gen_table_info'] = True
     table_config['namespace'] = namespace
