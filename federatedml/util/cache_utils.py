@@ -35,6 +35,7 @@ return: a dictionary contains table_name and namespace,
 e.g.： {'table_name': '5c33fe50bd7d11e988b352540012fde6', 'namespace': 'id_library_cache#10001#all#imei#md5#Za'}
 '''
 def host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=600):
+    LOGGER.debug('host_get_current_verison, {}, {}, {}, {}.'.format(host_party_id, id_type, encrypt_type, tag))
     return get_current_version(id_type, encrypt_type, tag, host_party_id, timeout=timeout)
 
 
@@ -43,6 +44,7 @@ return: a dictionary contains table_name and namespace,
 e.g.： {'table_name': '5c33fe50bd7d11e988b352540012fde6', 'namespace': 'id_library_cache#10001#10000#imei#md5#Za'}
 '''
 def guest_get_current_version(host_party_id, guest_party_id, id_type, encrypt_type, tag, timeout=600):
+    LOGGER.debug('guest_get_current_version, {}, {}, {}, {}, {}.'.format(host_party_id, guest_party_id, id_type, encrypt_type, tag))
     return get_current_version(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id, timeout=timeout)
 
 
@@ -50,6 +52,7 @@ def guest_get_current_version(host_party_id, guest_party_id, id_type, encrypt_ty
 return: a dictionary contains rsa_n, rsa_e, and rsa_d
 '''
 def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeout=60):
+    LOGGER.debug('get_rsa_of_current_version, {}, {}, {}, {}.'.format(host_party_id, id_type, encrypt_type, tag))
     table_info = host_get_current_verison(host_party_id, id_type, encrypt_type, tag, timeout=timeout)
     if table_info is None:
         LOGGER.info('no cache exists.')
@@ -80,9 +83,10 @@ def get_rsa_of_current_version(host_party_id, id_type, encrypt_type, tag, timeou
 
 
 def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt_type, tag='Za', namespace=None):
+    LOGGER.debug('start to store cache, {}, {}, {}, {}, {}, {}.'.format(guest_party_id, host_party_id, version, id_type, encrypt_type, tag))
     if namespace is None:
+        LOGGER.debug('gen_cache_namespace...')
         namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
-        LOGGER.debug(namespace)
     table_config = {}
     table_config['gen_table_info'] = True
     table_config['namespace'] = namespace
@@ -93,6 +97,7 @@ def store_cache(dtable, guest_party_id, host_party_id, version, id_type, encrypt
     
 
 def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa):
+    LOGGER.debug('start to store rsa, {}, {}, {}, {}, {}, {}, {}.'.format(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa))
     init_database_tables()
     with DB.connection_context():
         LOGGER.info('store rsa and out table info, partyid={}, id_type={}, encrypt_type={}, namespace={}, version={}.'.format(host_party_id, \
@@ -123,6 +128,7 @@ def store_rsa(host_party_id, id_type, encrypt_type, tag, namespace, version, rsa
 
 
 def clean_all_cache(host_party_id, id_type, encrypt_type, tag='Za', guest_party_id=None):
+    LOGGER.debug('clean_all_cache, {}, {}, {}, {}.'.format(host_party_id, id_type, encrypt_type, tag))
     namespace = gen_cache_namespace(id_type, encrypt_type, tag, host_party_id, guest_party_id=guest_party_id)
     eggroll.cleanup(name='*', namespace=namespace, persistent=True)
     version_table = version_control.get_version_table(data_table_namespace=namespace)
@@ -130,11 +136,13 @@ def clean_all_cache(host_party_id, id_type, encrypt_type, tag='Za', guest_party_
 
 
 def clean_cache(namespace, version):
+    LOGGER.debug('clean_cache, {}, {}.'.format(namespace, version))
     eggroll.cleanup(name=version, namespace=namespace, persistent=True)
     version_control.delete_version(version, namespace)
 
 
 def clean_all_rsa(host_party_id, id_type, encrypt_type, tag='Za'):
+    LOGGER.debug('clean_all_rsa, {}, {}, {}, {}.'.format(host_party_id, id_type, encrypt_type, tag))
     init_database_tables()
     with DB.connection_context():
         LOGGER.info('clean rsa and out table info, partyid={}, id_type={}, encrypt_type={}, tag={}.'.format(host_party_id, \
@@ -145,6 +153,7 @@ def clean_all_rsa(host_party_id, id_type, encrypt_type, tag='Za'):
 
 
 def clean_rsa(namespace, version):
+    LOGGER.debug('clean_rsa, {}, {}.'.format(namespace, version))
     init_database_tables()
     with DB.connection_context():
         LOGGER.info('clean rsa and out table info, namespace={}, version={}.'.format(namespace, version))
