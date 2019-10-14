@@ -22,9 +22,8 @@ It is strongly recommended to use docker, which greatly reduces the possibility 
 
 4. Check whether the 8080, 9060, and 9080 ports are occupied before executing. If you want to execute again, please delete the previous container and image with the docker command.
 
-5. It takes about 40 minutes to complete the execution, please wait for a moment.
-
    please follow the below step:
+
 
 ```
 #Get code
