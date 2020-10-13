@@ -25,7 +25,7 @@
         <guava.version>27.0.1-jre</guava.version>
         <grpc.version>1.16.1</grpc.version>
         <protobuf.version>3.6.1</protobuf.version>
-        <junit.version>4.12</junit.version>
+        <junit.version>4.13.1</junit.version>
         <log4j.version>2.11.1</log4j.version>
 
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
