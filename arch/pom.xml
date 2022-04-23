@@ -40,7 +40,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <guava.version>27.0.1-jre</guava.version>
-        <spring.version>5.1.4.RELEASE</spring.version>
+        <spring.version>5.3.19</spring.version>
 
         <grpc.version>1.16.1</grpc.version>
         <protobuf.version>3.6.1</protobuf.version>
